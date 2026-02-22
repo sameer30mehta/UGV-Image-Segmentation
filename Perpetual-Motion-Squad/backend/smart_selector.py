@@ -90,9 +90,9 @@ def analyze_image(image_rgb):
     recommended = max(scores, key=scores.get)
     
     model_names = {
-        'mit_b3': 'MiT-B3 (High Accuracy)',
-        'mit_b1': 'MiT-B1 (Balanced)',
-        'mit_b0': 'MiT-B0 (Real-Time)',
+        'mit_b3': 'FPN + MiT-B3',
+        'mit_b1': 'DeepLabV3+ + EfficientNet-B4',
+        'mit_b0': 'Linknet + MobileNetV2',
     }
     
     return {

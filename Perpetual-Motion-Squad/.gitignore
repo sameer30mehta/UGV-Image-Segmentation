@@ -21,6 +21,12 @@ test_results/
 *.pth
 best_segformer_model.pth
 
+# Backend runtime artifacts
+backend/uploads/
+backend/outputs/
+backend/weights/
+backend/models/
+
 # Exclude visualize script for now
 visualize.py
 

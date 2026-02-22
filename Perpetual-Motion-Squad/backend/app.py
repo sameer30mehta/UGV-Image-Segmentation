@@ -5,6 +5,7 @@ import uuid
 import shutil
 import base64
 import tempfile
+import mimetypes
 from io import BytesIO
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -13,7 +14,7 @@ import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,21 +29,7 @@ from finetune import run_finetune_pipeline
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-MODEL_WEIGHTS_PATH = os.environ.get("MODEL_WEIGHTS", None)
-if MODEL_WEIGHTS_PATH is None:
-    # Check common locations
-    _candidates = [
-        "../best_desert_segmentation.pth",
-        "weights/best_desert_segmentation.pth",
-        "weights/best_segformer_model.pth",
-        "../best_segformer_model.pth",
-    ]
-    for _c in _candidates:
-        if os.path.exists(_c):
-            MODEL_WEIGHTS_PATH = _c
-            break
-    if MODEL_WEIGHTS_PATH is None:
-        MODEL_WEIGHTS_PATH = "weights/best_desert_segmentation.pth"
+WEIGHTS_DIR = os.environ.get("MODEL_WEIGHTS_DIR", str(Path(__file__).parent / "weights"))
 
 NUM_CLASSES = int(os.environ.get("NUM_CLASSES", "6"))
 IMG_SIZE = 512
@@ -55,7 +42,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # MODEL LOADING
 # ============================================================================
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-registry = ModelRegistry(num_classes=NUM_CLASSES, device=DEVICE)
+registry = ModelRegistry(num_classes=NUM_CLASSES, device=DEVICE, weights_dir=WEIGHTS_DIR)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -65,13 +52,14 @@ async def lifespan(app):
         print(f"  [GPU] {torch.cuda.get_device_name(0)}")
     else:
         print(f"  [CPU] Running on CPU — CUDA not available")
-    weights = Path(MODEL_WEIGHTS_PATH)
-    if weights.exists():
-        registry.load_model("mit_b3", str(weights))
-        print(f"  [OK] Loaded weights: {weights}")
-    else:
-        registry.load_model("mit_b3")
-        print(f"  [WARN] No weights found at {weights}, using ImageNet pre-trained")
+    print(f"  Weights dir: {WEIGHTS_DIR}")
+    print("  Weight assignment:")
+    print(f"    - mit_b3 (FPN + MiT-B3): {registry.weight_paths.get('mit_b3') or 'ImageNet fallback'}")
+    print(f"    - mit_b1 (DeepLabV3+ + EfficientNet-B4): {registry.weight_paths.get('mit_b1') or 'ImageNet fallback'}")
+    print(f"    - mit_b0 (Linknet + MobileNetV2): {registry.weight_paths.get('mit_b0') or 'ImageNet fallback'}")
+    # Preload all three variants so velocity switching is immediate.
+    for model_key in ["mit_b3", "mit_b1", "mit_b0"]:
+        registry.load_model(model_key)
     print(f"  Classes: {NUM_CLASSES}")
     print(f"  Device: {DEVICE}")
     print(f"  Ready at http://localhost:8000\n")
@@ -95,8 +83,6 @@ app.add_middleware(
 
 # Serve frontend
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 # Serve output files
 app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
@@ -108,6 +94,17 @@ async def serve_index():
     if index_file.exists():
         return HTMLResponse(index_file.read_text(encoding="utf-8"))
     return JSONResponse({"error": "Frontend not found"}, status_code=404)
+
+
+@app.get("/static/{asset_path:path}")
+async def serve_static(asset_path: str):
+    """Serve frontend static assets from disk (read into memory for stable length)."""
+    file_path = FRONTEND_DIR / asset_path
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(404, "Static asset not found")
+    content = file_path.read_bytes()
+    media_type, _ = mimetypes.guess_type(str(file_path))
+    return Response(content, media_type=media_type or "application/octet-stream")
 
 
 # ============================================================================
@@ -179,6 +176,23 @@ def compute_class_distribution(mask, num_classes=None):
     return dist
 
 
+def compute_confidence_metrics(logits):
+    """Compute confidence-derived quality metrics from logits.
+
+    Note: `accuracy_estimate_pct` is a proxy derived from model confidence,
+    not ground-truth accuracy.
+    """
+    probs = torch.softmax(logits, dim=1)
+    max_conf = torch.max(probs, dim=1).values  # (B, H, W)
+    conf_mean = float(max_conf.mean().item())
+    high_conf = float((max_conf >= 0.8).float().mean().item())
+    return {
+        "confidence_score_pct": round(conf_mean * 100, 1),
+        "accuracy_estimate_pct": round(conf_mean * 100, 1),
+        "high_confidence_pixels_pct": round(high_conf * 100, 1),
+    }
+
+
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
@@ -186,7 +200,7 @@ def compute_class_distribution(mask, num_classes=None):
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Return 204 to avoid favicon 404 noise when no favicon file is provided."""
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @app.get("/api/health")
@@ -265,6 +279,7 @@ async def segment_image(file: UploadFile = File(...), model_key: str = Form(None
     
     # 2. Run inference
     pred_mask, logits, inference_time = run_inference(image_rgb, model_key)
+    quality_metrics = compute_confidence_metrics(logits)
     
     # 3. Generate outputs
     mask_rgb = mask_to_rgb(pred_mask, NUM_CLASSES)
@@ -329,6 +344,9 @@ async def segment_image(file: UploadFile = File(...), model_key: str = Form(None
         "class_distribution": distribution,
         "safety_percentages": safety_percentages,
         "inference_time_ms": round(inference_time * 1000, 1),
+        "confidence_score_pct": quality_metrics["confidence_score_pct"],
+        "accuracy_estimate_pct": quality_metrics["accuracy_estimate_pct"],
+        "high_confidence_pixels_pct": quality_metrics["high_confidence_pixels_pct"],
         "input_size": f"{orig_w}x{orig_h}",
         "model_used": model_key or registry.active_model_key,
     }
@@ -398,7 +416,7 @@ async def segment_video(
     4. Return URLs for all videos + stats
     """
     from video_processor import extract_frames_by_interval, stitch_video, stitch_sidebyside
-    from velocity_estimator import estimate_velocities_for_frames
+    from velocity_estimator import estimate_velocities_for_frames, get_velocity_thresholds
     
     # Save uploaded video
     video_id = str(uuid.uuid4())[:8]
@@ -434,6 +452,9 @@ async def segment_video(
     safety_frames = []
     gradcam_frames = []
     total_inference = 0
+    confidence_scores = []
+    accuracy_estimates = []
+    high_confidence_scores = []
     per_frame_details = []   # velocity + model info returned to frontend
     
     for i, frame in enumerate(frames):
@@ -443,12 +464,19 @@ async def segment_video(
         
         # Run inference with the velocity-selected model
         pred_mask, logits, inf_time = run_inference(frame, model_key=selected_model_key)
+        q = compute_confidence_metrics(logits)
+        confidence_scores.append(q["confidence_score_pct"])
+        accuracy_estimates.append(q["accuracy_estimate_pct"])
+        high_confidence_scores.append(q["high_confidence_pixels_pct"])
         total_inference += inf_time
         
         # Record per-frame details
         per_frame_details.append({
             **vdata,
             "inference_ms": round(inf_time * 1000, 1),
+            "confidence_score_pct": q["confidence_score_pct"],
+            "accuracy_estimate_pct": q["accuracy_estimate_pct"],
+            "high_confidence_pixels_pct": q["high_confidence_pixels_pct"],
         })
         
         # Generate all view types at original frame resolution
@@ -535,6 +563,9 @@ async def segment_video(
         "total_inference_ms": round(total_inference * 1000, 1),
         "avg_inference_per_frame_ms": round(total_inference / len(frames) * 1000, 1) if frames else 0,
         "avg_fps": round(len(frames) / total_inference, 1) if total_inference > 0 else 0,
+        "confidence_score_pct": round(float(np.mean(confidence_scores)), 1) if confidence_scores else 0,
+        "accuracy_estimate_pct": round(float(np.mean(accuracy_estimates)), 1) if accuracy_estimates else 0,
+        "high_confidence_pixels_pct": round(float(np.mean(high_confidence_scores)), 1) if high_confidence_scores else 0,
         "video_info": {
             "input_fps": video_data['input_fps'],
             "width": video_data['width'],
@@ -549,7 +580,7 @@ async def segment_video(
             "max_velocity": round(float(np.max(velocities)), 2) if velocities else 0,
             "min_velocity": round(float(np.min(velocities)), 2) if velocities else 0,
             "model_usage": model_usage,
-            "thresholds": {"low": 15.0, "high": 40.0},
+            "thresholds": get_velocity_thresholds(),
         },
     }
 

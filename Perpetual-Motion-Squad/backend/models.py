@@ -8,6 +8,7 @@ import torch.nn as nn
 import segmentation_models_pytorch as smp
 import numpy as np
 import cv2
+from pathlib import Path
 
 # Default class configuration (matches Colab training)
 DEFAULT_CLASS_NAMES = [
@@ -46,7 +47,9 @@ COLORMAP = np.array([
 
 MODEL_CONFIGS = {
     'mit_b3': {
-        'name': 'MiT-B3 (High Accuracy)',
+        'name': 'FPN + MiT-B3',
+        'official_name': 'FPN + MiT-B3',
+        'arch': 'fpn',
         'encoder': 'mit_b3',
         'description': 'Best accuracy. Mix Vision Transformer with deep feature extraction. Best for complex scenes with many similar classes.',
         'params': '~47M',
@@ -55,35 +58,131 @@ MODEL_CONFIGS = {
         'use_case': 'Complex monochromatic scenes, many small objects',
     },
     'mit_b1': {
-        'name': 'MiT-B1 (Balanced)',
-        'encoder': 'mit_b1',
-        'description': 'Good balance of speed and accuracy. Suitable for most scenes.',
-        'params': '~17M',
-        'speed': 'Fast',
+        'name': 'DeepLabV3+ + EfficientNet-B4',
+        'official_name': 'DeepLabV3+ + EfficientNet-B4',
+        'arch': 'deeplabv3plus',
+        'encoder': 'efficientnet-b4',
+        'native_classes': 10,
+        'description': 'EfficientNet-based DeepLabV3+ model (Lovasz-trained checkpoint compatible). High quality with good throughput.',
+        'params': '~25M',
+        'speed': 'Medium-Fast',
         'accuracy': 'High',
-        'use_case': 'General purpose, good color contrast scenes',
+        'use_case': 'General purpose scenes where efficientnet checkpoint is preferred',
     },
     'mit_b0': {
-        'name': 'MiT-B0 (Real-Time)',
-        'encoder': 'mit_b0',
-        'description': 'Ultra-lightweight for real-time UGV navigation. Trades accuracy for speed.',
-        'params': '~7M',
+        'name': 'Linknet + MobileNetV2',
+        'official_name': 'Linknet + MobileNetV2',
+        'arch': 'linknet',
+        'encoder': 'mobilenet_v2',
+        'description': 'Ultra-fast non-FPN runtime model for high-motion segments. Prioritizes latency over fine detail accuracy.',
+        'params': '~4M',
         'speed': 'Very Fast',
-        'accuracy': 'Good',
+        'accuracy': 'Moderate',
         'use_case': 'Real-time navigation, video processing',
     },
 }
 
 
+def discover_weights(weights_dir=None):
+    """Discover and assign available .pth files from weights directory to model tiers."""
+    if weights_dir is None:
+        weights_dir = Path(__file__).parent / "weights"
+    else:
+        weights_dir = Path(weights_dir)
+
+    mapping = {
+        'mit_b3': None,
+        'mit_b1': None,
+        'mit_b0': None,
+    }
+    if not weights_dir.exists() or not weights_dir.is_dir():
+        return mapping
+
+    pths = sorted(weights_dir.glob("*.pth"))
+    if not pths:
+        return mapping
+
+    # Highest-priority (best): explicitly prefer best_desert_segmentation.pth
+    best_b3 = next((p for p in pths if p.name.lower() == "best_desert_segmentation.pth"), None)
+    if best_b3 is None:
+        best_b3 = pths[0]
+    mapping['mit_b3'] = str(best_b3)
+
+    # Second-tier (almost as good): explicitly prefer best_model.pth, else any other available
+    best_b1 = next((p for p in pths if p.name.lower() == "best_model.pth" and p != best_b3), None)
+    if best_b1 is None:
+        alternatives = [p for p in pths if p != best_b3]
+        if alternatives:
+            best_b1 = alternatives[0]
+    if best_b1 is not None:
+        mapping['mit_b1'] = str(best_b1)
+
+    # Third tier (ultra-fast) intentionally remains lightweight fallback if no compatible weight exists.
+    # If a third file exists, assign it to mit_b0.
+    used = {best_b3, best_b1}
+    third_candidates = [p for p in pths if p not in used]
+    if third_candidates:
+        mapping['mit_b0'] = str(third_candidates[0])
+
+    return mapping
+
+
 class ModelRegistry:
     """Manages multiple segmentation models for intelligent selection."""
     
-    def __init__(self, num_classes=6, device='cuda'):
+    def __init__(self, num_classes=6, device='cuda', weights_dir=None):
         self.num_classes = num_classes
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.models = {}
         self.active_model_key = None
         self.class_names = DEFAULT_CLASS_NAMES[:num_classes]
+        self.weights_dir = weights_dir or str(Path(__file__).parent / "weights")
+        self.weight_paths = discover_weights(self.weights_dir)
+
+    def _build_model(self, config, use_pretrained_weights):
+        """Build model instance from config."""
+        encoder_weights = 'imagenet' if use_pretrained_weights else None
+        arch = config.get('arch', 'fpn')
+
+        model_classes = int(config.get('native_classes', self.num_classes))
+
+        if arch == 'fpn':
+            return smp.FPN(
+                encoder_name=config['encoder'],
+                encoder_weights=encoder_weights,
+                in_channels=3,
+                classes=model_classes,
+                decoder_dropout=0.2
+            )
+
+        if arch == 'deeplabv3plus':
+            return smp.DeepLabV3Plus(
+                encoder_name=config['encoder'],
+                encoder_weights=encoder_weights,
+                in_channels=3,
+                classes=model_classes,
+            )
+
+        if arch == 'linknet':
+            return smp.Linknet(
+                encoder_name=config['encoder'],
+                encoder_weights=encoder_weights,
+                in_channels=3,
+                classes=model_classes,
+            )
+
+        raise ValueError(f"Unsupported model arch: {arch}")
+
+    @staticmethod
+    def _extract_state_dict(payload):
+        """Handle common checkpoint wrappers."""
+        if not isinstance(payload, dict):
+            return payload
+        if 'model_state_dict' in payload and isinstance(payload['model_state_dict'], dict):
+            return payload['model_state_dict']
+        if 'state_dict' in payload and isinstance(payload['state_dict'], dict):
+            return payload['state_dict']
+        return payload
     
     def load_model(self, key, weights_path=None):
         """Load a model variant by key."""
@@ -91,24 +190,35 @@ class ModelRegistry:
             raise ValueError(f"Unknown model key: {key}. Available: {list(MODEL_CONFIGS.keys())}")
         
         config = MODEL_CONFIGS[key]
+        if weights_path is None:
+            weights_path = self.weight_paths.get(key)
         
         # Check if weights file is valid (not a Git LFS pointer)
         use_pretrained_weights = True
         if weights_path and os.path.exists(weights_path) and os.path.getsize(weights_path) > 1000:
             use_pretrained_weights = False
+        elif config.get('pretrained_fallback', True) is False:
+            use_pretrained_weights = False
         
-        model = smp.FPN(
-            encoder_name=config['encoder'],
-            encoder_weights='imagenet' if use_pretrained_weights else None,
-            in_channels=3,
-            classes=self.num_classes,
-            decoder_dropout=0.2
-        )
+        model = self._build_model(config, use_pretrained_weights)
         
         if weights_path and not use_pretrained_weights:
-            state_dict = torch.load(weights_path, map_location=self.device)
-            model.load_state_dict(state_dict, strict=False)
-            print(f"  Loaded weights from {weights_path}")
+            try:
+                state_dict = torch.load(weights_path, map_location=self.device)
+                state_dict = self._extract_state_dict(state_dict)
+                incompatible = model.load_state_dict(state_dict, strict=False)
+                total_params = len(model.state_dict())
+                missing = len(getattr(incompatible, 'missing_keys', []))
+                unexpected = len(getattr(incompatible, 'unexpected_keys', []))
+                matched = max(total_params - missing, 0)
+                match_ratio = matched / max(total_params, 1)
+                print(f"  Loaded weights from {weights_path}")
+                print(f"  Checkpoint compatibility: matched={matched}/{total_params} ({match_ratio:.1%}), missing={missing}, unexpected={unexpected}")
+                if match_ratio < 0.5:
+                    print("  [WARN] Low checkpoint compatibility for this architecture. The checkpoint may belong to a different backbone/model family.")
+            except Exception as exc:
+                print(f"  [WARN] Failed loading {weights_path} for {key}: {exc}")
+                print("  [WARN] Falling back to ImageNet-pretrained encoder weights")
         elif use_pretrained_weights:
             print(f"  Using ImageNet pretrained weights (custom weights not available)")
         
@@ -119,7 +229,7 @@ class ModelRegistry:
         if self.active_model_key is None:
             self.active_model_key = key
         
-        print(f"[OK] Loaded: {config['name']} ({config['params']} params)")
+        print(f"[OK] Loaded: {config['name']} [{config.get('official_name', config.get('arch', 'model'))}] ({config['params']} params)")
         return model
     
     def get_model(self, key=None):
@@ -165,11 +275,24 @@ class ModelRegistry:
     
     def predict(self, image_tensor, key=None):
         """Run inference with the specified or active model."""
+        key = key or self.active_model_key
         model = self.get_model(key)
+        config = MODEL_CONFIGS.get(key, {})
+        native_classes = int(config.get('native_classes', self.num_classes))
         with torch.no_grad():
             device_type = 'cuda' if self.device.type == 'cuda' else 'cpu'
             with torch.amp.autocast(device_type, enabled=(device_type == 'cuda')):
                 logits = model(image_tensor.to(self.device))
+        # Keep runtime interfaces consistent even when a model uses native class count.
+        if native_classes > self.num_classes:
+            logits = logits[:, :self.num_classes, ...]
+        elif native_classes < self.num_classes:
+            pad = torch.zeros(
+                (logits.shape[0], self.num_classes - native_classes, logits.shape[2], logits.shape[3]),
+                device=logits.device,
+                dtype=logits.dtype,
+            )
+            logits = torch.cat([logits, pad], dim=1)
         return logits
     
     def get_info(self):
@@ -180,6 +303,7 @@ class ModelRegistry:
                 **config,
                 'loaded': key in self.models,
                 'active': key == self.active_model_key,
+                'weights_path': self.weight_paths.get(key),
             }
         return info
 

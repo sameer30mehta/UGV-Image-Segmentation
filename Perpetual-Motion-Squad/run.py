@@ -16,6 +16,32 @@ Or set the environment variable:
 """
 import os
 import sys
+from pathlib import Path
+
+
+def discover_weights_local(weights_dir):
+    """Lightweight weight discovery for launcher logging."""
+    mapping = {'mit_b3': None, 'mit_b1': None, 'mit_b0': None}
+    pths = sorted(weights_dir.glob("*.pth")) if weights_dir.exists() else []
+    if not pths:
+        return mapping
+
+    best_b3 = next((p for p in pths if p.name.lower() == "best_desert_segmentation.pth"), None) or pths[0]
+    mapping['mit_b3'] = str(best_b3)
+
+    best_b1 = next((p for p in pths if p.name.lower() == "best_model.pth" and p != best_b3), None)
+    if best_b1 is None:
+        alternatives = [p for p in pths if p != best_b3]
+        if alternatives:
+            best_b1 = alternatives[0]
+    if best_b1 is not None:
+        mapping['mit_b1'] = str(best_b1)
+
+    used = {best_b3, best_b1}
+    third = [p for p in pths if p not in used]
+    if third:
+        mapping['mit_b0'] = str(third[0])
+    return mapping
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
@@ -37,14 +63,24 @@ if __name__ == '__main__':
     print("  API Docs:  http://localhost:8000/docs")
     print()
     
-    # Check for model weights
-    weights_path = os.environ.get("MODEL_WEIGHTS", "backend/weights/best_desert_segmentation.pth")
-    if os.path.exists(weights_path):
-        print(f"  [OK] Model weights found: {weights_path}")
+    # Check and report model weights
+    root_dir = Path(__file__).parent
+    weights_dir = Path(os.environ.get("MODEL_WEIGHTS_DIR", str(root_dir / "backend" / "weights")))
+    weight_map = discover_weights_local(weights_dir)
+    pth_files = sorted(weights_dir.glob("*.pth")) if weights_dir.exists() else []
+
+    if pth_files:
+        print(f"  [OK] Weight files detected in {weights_dir}:")
+        for p in pth_files:
+            print(f"     - {p}")
+        print("  Assigned model tiers:")
+        print(f"     - mit_b3 (best): {weight_map.get('mit_b3') or 'ImageNet fallback'}")
+        print(f"     - mit_b1 (second): {weight_map.get('mit_b1') or 'ImageNet fallback'}")
+        print(f"     - mit_b0 (ultra-fast): {weight_map.get('mit_b0') or 'ImageNet fallback'}")
     else:
-        print(f"  [WARN] No weights at: {weights_path}")
-        print(f"     Using ImageNet pre-trained (results will be untrained)")
-        print(f"     Copy your .pth file to: backend/weights/best_desert_segmentation.pth")
+        print(f"  [WARN] No .pth files found in: {weights_dir}")
+        print("     Using ImageNet pre-trained initialization")
+        print("     Copy your .pth files into backend/weights")
     
     print()
     print("=" * 60)

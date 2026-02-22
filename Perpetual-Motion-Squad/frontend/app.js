@@ -303,7 +303,12 @@ async function checkHealth() {
         document.getElementById('statusDot').classList.add('connected');
         document.getElementById('statusText').textContent = `${data.gpu || 'CPU'} · ${data.active_model || 'Loading...'}`;
         document.getElementById('statDevice').textContent = data.gpu ? 'GPU' : 'CPU';
-        document.getElementById('statModel').textContent = (data.active_model || 'mit_b3').replace('mit_', 'MiT-');
+        const modelNames = {
+            mit_b3: 'FPN + MiT-B3',
+            mit_b1: 'DeepLabV3+ + EfficientNet-B4',
+            mit_b0: 'Linknet + MobileNetV2',
+        };
+        document.getElementById('statModel').textContent = modelNames[data.active_model] || data.active_model || '—';
     } catch (e) {
         document.getElementById('statusText').textContent = 'Server offline';
     }
@@ -517,7 +522,9 @@ function renderResults(data) {
 
     // Inference badge + history
     const badge = document.getElementById('inferenceBadge');
-    badge.textContent = `${data.inference_time_ms}ms`;
+    const conf = data.confidence_score_pct ?? 0;
+    const acc = data.accuracy_estimate_pct ?? 0;
+    badge.textContent = `${data.inference_time_ms}ms · Conf ${conf}% · Acc(est) ${acc}%`;
     updateInferenceHistory(data.inference_time_ms, data.model_used);
 
     // Safety gauge
@@ -530,7 +537,7 @@ function renderResults(data) {
     legend.innerHTML = data.class_distribution.map(c =>
         `<div class="legend-item">
             <div class="legend-color" style="background:rgb(${c.color.join(',')})"></div>
-            <span>${c.name} (${c.percentage}%)</span>
+            <span>${c.percentage}%</span>
         </div>`
     ).join('');
 
@@ -600,7 +607,7 @@ function renderDistributionChart(distribution) {
     state.distChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: distribution.map(c => c.name),
+            labels: distribution.map(c => `${c.percentage}%`),
             datasets: [{
                 data: distribution.map(c => c.percentage),
                 backgroundColor: distribution.map(c => `rgb(${c.color.join(',')})`),
@@ -811,8 +818,13 @@ async function fetchRecommendation(file) {
 function renderRecommendation(data) {
     const panel = document.getElementById('recommendationPanel');
     const maxScore = Math.max(...Object.values(data.scores), 1);
+    const modelNames = {
+        mit_b3: 'FPN + MiT-B3',
+        mit_b1: 'DeepLabV3+ + EfficientNet-B4',
+        mit_b0: 'Linknet + MobileNetV2',
+    };
     const scoreBars = Object.entries(data.scores).map(([key, score]) => {
-        const name = key.replace('mit_', 'MiT-').toUpperCase();
+        const name = modelNames[key] || key;
         const pct = Math.round((score / maxScore) * 100);
         const isWinner = key === data.recommended;
         return `<div class="model-score-bar">
@@ -851,7 +863,12 @@ function renderRecommendation(data) {
 }
 
 function generateModelNarrative(data) {
-    const model = data.recommended_name;
+    const modelNames = {
+        mit_b3: 'FPN + MiT-B3',
+        mit_b1: 'DeepLabV3+ + EfficientNet-B4',
+        mit_b0: 'Linknet + MobileNetV2',
+    };
+    const model = modelNames[data.recommended] || data.recommended_name;
     const conf = Math.round(data.confidence * 100);
     const topReason = data.reasons[0] || 'Scene complexity analyzed.';
     const edgeLvl = data.analysis.edge_density > 0.15 ? 'high' : data.analysis.edge_density > 0.08 ? 'moderate' : 'low';
@@ -938,7 +955,11 @@ async function runModelComparison(file) {
 
 function renderModelComparison(results) {
     const grid = document.getElementById('compareModelsGrid');
-    const names = { 'mit_b0': 'MiT-B0 (Real-Time)', 'mit_b1': 'MiT-B1 (Balanced)', 'mit_b3': 'MiT-B3 (High Accuracy)' };
+    const names = {
+        'mit_b0': 'Linknet + MobileNetV2',
+        'mit_b1': 'DeepLabV3+ + EfficientNet-B4',
+        'mit_b3': 'FPN + MiT-B3'
+    };
     grid.innerHTML = Object.entries(results).map(([key, r]) => {
         if (r.error) return `<div class="compare-model-card"><div class="compare-model-info"><div class="compare-model-name">${names[key]}</div><div style="color:var(--danger);font-size:12px;">Error: ${r.error}</div></div></div>`;
         return `<div class="compare-model-card">
@@ -975,7 +996,7 @@ async function handleVideoUpload(file) {
         fill.style.width = `${progress}%`;
         if (progress < 20) text.textContent = 'Extracting frames at 200ms intervals...';
         else if (progress < 40) text.textContent = 'Running DIP preprocessing on each frame...';
-        else if (progress < 60) text.textContent = 'Segmenting frames with MiT-B3...';
+        else if (progress < 60) text.textContent = 'Segmenting frames with adaptive model switching...';
         else if (progress < 75) text.textContent = 'Generating GradCAM heatmaps...';
         else text.textContent = 'Stitching output videos...';
     }, 800);
@@ -1005,6 +1026,8 @@ async function handleVideoUpload(file) {
             <div class="video-stat">${data.avg_fps} FPS throughput</div>
             <div class="video-stat">${data.total_inference_ms}ms total</div>
             <div class="video-stat">${data.avg_inference_per_frame_ms}ms/frame</div>
+            <div class="video-stat">Confidence: ${data.confidence_score_pct ?? 0}%</div>
+            <div class="video-stat">Accuracy(est): ${data.accuracy_estimate_pct ?? 0}%</div>
             <div class="video-stat">${data.video_info.width}x${data.video_info.height}</div>
             <div class="video-stat">${data.video_info.duration_s}s duration</div>
         `;
@@ -1054,20 +1077,27 @@ function renderVelocityDashboard(data) {
     const perFrame = v.per_frame || [];
 
     // ── Summary cards ──
-    const modelNames = { mit_b3: 'MiT-B3 (Accurate)', mit_b1: 'MiT-B1 (Balanced)', mit_b0: 'MiT-B0 (Fast)' };
+    const modelNames = {
+        mit_b3: 'FPN + MiT-B3',
+        mit_b1: 'DeepLabV3+ + EfficientNet-B4',
+        mit_b0: 'Linknet + MobileNetV2'
+    };
     const tierClass = { accurate: 'accurate', balanced: 'balanced', fast: 'fast' };
 
     let usageHtml = '';
     for (const [mk, count] of Object.entries(v.model_usage)) {
         const pct = ((count / data.frames_processed) * 100).toFixed(0);
         const tier = perFrame.find(f => f.model_key === mk)?.model_tier || 'balanced';
-        usageHtml += `<span class="vel-model-tag ${tierClass[tier] || ''}">${modelNames[mk] || mk}: ${count} (${pct}%)</span> `;
+        const displayName = perFrame.find(f => f.model_key === mk)?.model_name || modelNames[mk] || mk;
+        usageHtml += `<span class="vel-model-tag ${tierClass[tier] || ''}">${displayName}: ${count} (${pct}%)</span> `;
     }
 
     document.getElementById('velocitySummary').innerHTML = `
         <div class="vel-stat"><span class="vel-label">Avg Velocity</span><span class="vel-value">${v.avg_velocity} px/s</span></div>
         <div class="vel-stat"><span class="vel-label">Max Velocity</span><span class="vel-value">${v.max_velocity} px/s</span></div>
         <div class="vel-stat"><span class="vel-label">Min Velocity</span><span class="vel-value">${v.min_velocity} px/s</span></div>
+        <div class="vel-stat"><span class="vel-label">Confidence</span><span class="vel-value">${data.confidence_score_pct ?? 0}%</span></div>
+        <div class="vel-stat"><span class="vel-label">Accuracy (est.)</span><span class="vel-value">${data.accuracy_estimate_pct ?? 0}%</span></div>
         <div class="vel-stat" style="flex:1 1 auto;"><span class="vel-label">Model Usage</span><span class="vel-value">${usageHtml}</span></div>
     `;
 
@@ -1082,14 +1112,16 @@ function renderVelocityDashboard(data) {
             <td>${f.velocity}</td>
             <td>${f.displacement_px}</td>
             <td>${f.tracked_points}</td>
-            <td><span class="vel-model-tag ${tierClass[tier]}">${f.model_key}</span></td>
+            <td><span class="vel-model-tag ${tierClass[tier]}">${f.model_name || modelNames[f.model_key] || f.model_key}</span></td>
+            <td>${f.confidence_score_pct ?? 0}%</td>
+            <td>${f.accuracy_estimate_pct ?? 0}%</td>
             <td>${f.inference_ms} ms</td>
         </tr>`;
     }).join('');
 
     document.getElementById('velocityTable').innerHTML = `
         <table>
-            <thead><tr><th>#</th><th>Velocity (px/s)</th><th>Displacement</th><th>Points</th><th>Model</th><th>Inference</th></tr></thead>
+            <thead><tr><th>#</th><th>Velocity (px/s)</th><th>Displacement</th><th>Points</th><th>Model</th><th>Confidence</th><th>Accuracy (est.)</th><th>Inference</th></tr></thead>
             <tbody>${rows}</tbody>
         </table>`;
 }
@@ -1196,13 +1228,13 @@ async function loadModels() {
 function renderModels(models) {
     const grid = document.getElementById('modelsGrid');
     const configs = models || {
-        'mit_b3': { name: 'MiT-B3 (High Accuracy)', params: '~47M', speed: 'Medium', accuracy: 'Highest', use_case: 'Complex monochromatic scenes', description: 'Best accuracy. Deep feature extraction.', active: true, loaded: false },
-        'mit_b1': { name: 'MiT-B1 (Balanced)', params: '~17M', speed: 'Fast', accuracy: 'High', use_case: 'General purpose', description: 'Good balance of speed and accuracy.', active: false, loaded: false },
-        'mit_b0': { name: 'MiT-B0 (Real-Time)', params: '~7M', speed: 'Very Fast', accuracy: 'Good', use_case: 'Real-time UGV navigation', description: 'Ultra-lightweight for speed.', active: false, loaded: false },
+        'mit_b3': { name: 'FPN + MiT-B3', official_name: 'FPN + MiT-B3', params: '~47M', speed: 'Medium', accuracy: 'Highest', use_case: 'Complex monochromatic scenes', description: 'Best accuracy. Deep feature extraction.', active: true, loaded: false },
+        'mit_b1': { name: 'DeepLabV3+ + EfficientNet-B4', official_name: 'DeepLabV3+ + EfficientNet-B4', params: '~25M', speed: 'Medium-Fast', accuracy: 'High', use_case: 'General purpose', description: 'EfficientNet-based checkpoint-compatible model.', active: false, loaded: false },
+        'mit_b0': { name: 'Linknet + MobileNetV2', official_name: 'Linknet + MobileNetV2', params: '~4M', speed: 'Very Fast', accuracy: 'Moderate', use_case: 'High-motion real-time video', description: 'Ultra-fast non-FPN model for latency-critical inference.', active: false, loaded: false },
     };
 
-    const speedMap = { 'Very Fast': 95, 'Fast': 70, 'Medium': 45 };
-    const accMap = { 'Highest': 95, 'High': 75, 'Good': 55 };
+    const speedMap = { 'Very Fast': 95, 'Fast': 70, 'Medium-Fast': 58, 'Medium': 45 };
+    const accMap = { 'Highest': 95, 'High': 75, 'Good': 55, 'Moderate': 45 };
 
     grid.innerHTML = Object.entries(configs).map(([key, m]) => `
         <div class="model-card ${m.active ? 'active-model' : ''}" id="model-${key}">
@@ -1210,6 +1242,7 @@ function renderModels(models) {
                 <h3>${m.name}</h3>
                 <span class="model-loaded-badge ${m.loaded ? 'in-memory' : 'not-loaded'}">${m.loaded ? 'In Memory' : 'Load on Use'}</span>
             </div>
+            ${m.official_name ? `<div class="model-spec" style="margin:-4px 0 8px 0;"><strong>Official:</strong> ${m.official_name}</div>` : ''}
             <p>${m.description}</p>
             <div class="model-specs">
                 <div class="model-spec"><strong>Params:</strong> ${m.params}</div>
@@ -2035,7 +2068,11 @@ function renderDisagreement(data) {
         <div class="disagree-stat"><div class="disagree-stat-val full">${s.full_disagreement}%</div><div class="disagree-stat-label">Full Disagreement</div></div>
     `;
 
-    const modelNames = { mit_b0: 'MiT-B0 Prediction', mit_b1: 'MiT-B1 Prediction', mit_b3: 'MiT-B3 Prediction' };
+    const modelNames = {
+        mit_b0: 'Linknet + MobileNetV2 Prediction',
+        mit_b1: 'DeepLabV3+ + EfficientNet-B4 Prediction',
+        mit_b3: 'FPN + MiT-B3 Prediction'
+    };
     const imgCards = Object.entries(data.per_model_predictions).map(([key, b64]) =>
         `<div class="disagree-card"><img src="data:image/jpeg;base64,${b64}" alt="${key}" loading="lazy"><div class="disagree-card-label">${modelNames[key] || key}</div></div>`
     ).join('');
@@ -2487,9 +2524,8 @@ function showNotification(message, type = 'info') {
     document.addEventListener('DOMContentLoaded', () => {
         const outputImg = document.getElementById('resultOutput');
         const tooltip = document.getElementById('confTooltip');
-        const confClass = document.getElementById('confClass');
         const confValue = document.getElementById('confValue');
-        if (!outputImg || !tooltip) return;
+        if (!outputImg || !tooltip || !confValue) return;
 
         outputImg.addEventListener('mousemove', (e) => {
             const grid = state.currentResult && state.currentResult.confidence_grid;
@@ -2501,7 +2537,6 @@ function showNotification(message, type = 'info') {
             const cell = grid.cells[gy * grid.grid_w + gx];
             if (!cell) return;
 
-            confClass.textContent = cell.n;
             confValue.textContent = `${cell.p}%`;
             confValue.className = 'conf-value';
             if (cell.p >= 80) confValue.classList.add('conf-high');

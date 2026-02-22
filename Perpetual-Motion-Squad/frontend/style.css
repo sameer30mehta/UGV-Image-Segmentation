@@ -1008,10 +1008,33 @@ body.is-processing .upload-zone {
    ========================== */
 .ml-pipeline {
     margin: 40px 0;
-    padding: 32px 0;
+    padding: 34px 26px;
     border-top: 1px solid var(--glass-border);
     border-bottom: 1px solid var(--glass-border);
+    border-left: 1px solid rgba(232, 98, 45, 0.12);
+    border-right: 1px solid rgba(232, 98, 45, 0.12);
+    border-radius: 6px;
+    background:
+        radial-gradient(1200px 260px at 50% -30%, rgba(232, 98, 45, 0.14) 0%, rgba(232, 98, 45, 0.03) 36%, rgba(0, 0, 0, 0) 72%),
+        linear-gradient(180deg, rgba(232, 98, 45, 0.03) 0%, rgba(8, 8, 8, 0.16) 100%);
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.35), inset 0 0 40px rgba(232, 98, 45, 0.04);
     animation: sectionIn 0.6s var(--ease-out);
+    position: relative;
+    overflow: hidden;
+}
+
+.ml-pipeline::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(232, 98, 45, 0.16) 0%, rgba(212, 165, 116, 0.06) 40%, rgba(232, 98, 45, 0.16) 100%);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    padding: 1px;
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    opacity: 0.8;
 }
 
 .ml-pipeline-track {
@@ -1019,7 +1042,10 @@ body.is-processing .upload-zone {
     align-items: flex-start;
     justify-content: space-between;
     position: relative;
-    padding: 16px 0;
+    padding: 20px 14px 24px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(232, 98, 45, 0.03) 0%, rgba(8, 8, 8, 0.1) 100%);
+    border: 1px solid rgba(180, 140, 100, 0.08);
 }
 
 .ml-step {
@@ -1037,8 +1063,8 @@ body.is-processing .upload-zone {
     top: 24px;
     left: -50%;
     right: 50%;
-    height: 1px;
-    background: rgba(180, 140, 100, 0.1);
+    height: 2px;
+    background: linear-gradient(90deg, rgba(180, 140, 100, 0.06), rgba(180, 140, 100, 0.2), rgba(180, 140, 100, 0.06));
     z-index: 0;
     overflow: hidden;
 }
@@ -1061,22 +1087,23 @@ body.is-processing .upload-zone {
 .ml-step.is-complete .ml-step-connector::after,
 .ml-step.is-active .ml-step-connector::after {
     transform: scaleX(1);
-    box-shadow: 0 0 12px rgba(232, 98, 45, 0.3);
+    box-shadow: 0 0 14px rgba(232, 98, 45, 0.45), 0 0 30px rgba(232, 98, 45, 0.22);
 }
 
 /* Step node */
 .ml-step-node {
-    width: 48px;
-    height: 48px;
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--void);
-    border: 1px solid rgba(180, 140, 100, 0.12);
+    background: radial-gradient(circle, rgba(8, 8, 8, 0.85) 0%, rgba(8, 8, 8, 0.98) 78%);
+    border: 1px solid rgba(180, 140, 100, 0.2);
     transition: all 0.5s var(--ease);
     position: relative;
     z-index: 2;
+    box-shadow: inset 0 0 14px rgba(232, 98, 45, 0.08);
 }
 
 .ml-step-icon {
@@ -1090,9 +1117,9 @@ body.is-processing .upload-zone {
 /* Active — warm pulsing glow */
 .ml-step.is-active .ml-step-node {
     border-color: var(--mars-400);
-    box-shadow: 0 0 25px rgba(232, 98, 45, 0.2), 0 0 50px rgba(232, 98, 45, 0.08);
+    box-shadow: 0 0 28px rgba(232, 98, 45, 0.34), 0 0 64px rgba(232, 98, 45, 0.15), inset 0 0 18px rgba(232, 98, 45, 0.16);
     animation: nodeGlow 2s ease-in-out infinite;
-    background: rgba(232, 98, 45, 0.05);
+    background: radial-gradient(circle, rgba(232, 98, 45, 0.2) 0%, rgba(8, 8, 8, 0.96) 75%);
 }
 
 .ml-step.is-active .ml-step-icon {
@@ -1111,26 +1138,32 @@ body.is-processing .upload-zone {
     }
 }
 
-/* Complete — subtle green */
+/* Complete — sleek orange fill */
 .ml-step.is-complete .ml-step-node {
-    border-color: var(--safe);
-    background: rgba(74, 222, 128, 0.05);
-    box-shadow: 0 0 15px rgba(74, 222, 128, 0.12);
+    border-color: var(--mars-400);
+    background: radial-gradient(circle, rgba(232, 98, 45, 0.35) 0%, rgba(212, 165, 116, 0.12) 70%);
+    box-shadow: 0 0 20px rgba(232, 98, 45, 0.25), 0 0 40px rgba(232, 98, 45, 0.08), inset 0 0 15px rgba(232, 98, 45, 0.15);
+    animation: completeFill 0.6s var(--ease) forwards;
+}
+
+@keyframes completeFill {
+    0% {
+        background: radial-gradient(circle, rgba(232, 98, 45, 0) 0%, rgba(212, 165, 116, 0) 70%);
+        box-shadow: 0 0 0 rgba(232, 98, 45, 0);
+    }
+    60% {
+        background: radial-gradient(circle, rgba(232, 98, 45, 0.45) 0%, rgba(212, 165, 116, 0.18) 70%);
+        box-shadow: 0 0 30px rgba(232, 98, 45, 0.35), 0 0 60px rgba(232, 98, 45, 0.12), inset 0 0 20px rgba(232, 98, 45, 0.2);
+    }
+    100% {
+        background: radial-gradient(circle, rgba(232, 98, 45, 0.35) 0%, rgba(212, 165, 116, 0.12) 70%);
+        box-shadow: 0 0 20px rgba(232, 98, 45, 0.25), 0 0 40px rgba(232, 98, 45, 0.08), inset 0 0 15px rgba(232, 98, 45, 0.15);
+    }
 }
 
 .ml-step.is-complete .ml-step-icon {
-    color: var(--safe);
-}
-
-.ml-step.is-complete .ml-step-icon svg {
-    display: none;
-}
-
-.ml-step.is-complete .ml-step-icon::after {
-    content: '✓';
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--safe);
+    color: #fff;
+    filter: drop-shadow(0 0 4px rgba(232, 98, 45, 0.5));
 }
 
 /* Error */
@@ -1161,7 +1194,7 @@ body.is-processing .upload-zone {
 }
 
 .ml-step.is-complete .ml-step-label {
-    color: var(--safe);
+    color: var(--mars-400);
 }
 
 .ml-step-desc {
@@ -2095,12 +2128,13 @@ body.is-processing .upload-zone {
     left: 8%;
     z-index: 2;
     pointer-events: none;
-    opacity: .35;
+    opacity: .7;
+    filter: brightness(1.35) saturate(1.2) drop-shadow(0 0 24px rgba(232, 98, 45, 0.45));
     animation: roverFloat 8s ease-in-out infinite
 }
 
 .rover-svg {
-    width: 140px;
+    width: 156px;
     height: auto
 }
 
@@ -3198,14 +3232,14 @@ body.is-processing .mars-planet::before {
    ========================== */
 .pipeline-rover {
     position: absolute;
-    bottom: -14px;
+    bottom: -18px;
     left: 0;
     z-index: 10;
     transition: left 0.7s var(--ease-spring);
     pointer-events: none;
     opacity: 0;
     transform: translateX(-50%);
-    filter: drop-shadow(0 0 10px rgba(232, 98, 45, 0.4));
+    filter: brightness(1.35) saturate(1.25) drop-shadow(0 0 14px rgba(232, 98, 45, 0.75)) drop-shadow(0 0 32px rgba(232, 98, 45, 0.35));
 }
 
 .pipeline-rover.visible {
@@ -3213,7 +3247,7 @@ body.is-processing .mars-planet::before {
 }
 
 .pipeline-rover-svg {
-    width: 44px;
+    width: 58px;
     height: auto;
     display: block;
 }
@@ -3234,9 +3268,9 @@ body.is-processing .mars-planet::before {
 .rover-exhaust {
     position: absolute;
     bottom: 0;
-    left: -8px;
-    width: 6px;
-    height: 6px;
+    left: -10px;
+    width: 8px;
+    height: 8px;
     background: rgba(232, 98, 45, 0.0);
     border-radius: 50%;
 }
@@ -3244,10 +3278,10 @@ body.is-processing .mars-planet::before {
 .pipeline-rover.moving .rover-exhaust::after {
     content: '';
     position: absolute;
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    background: rgba(232, 98, 45, 0.4);
+    background: rgba(255, 174, 94, 0.7);
     animation: exhaustPuff 0.4s ease-out infinite;
 }
 

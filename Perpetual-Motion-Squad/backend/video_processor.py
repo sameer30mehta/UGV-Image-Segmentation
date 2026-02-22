@@ -50,16 +50,21 @@ def extract_frames_by_interval(video_path, interval_ms=200, max_frames=300):
     
     frames = []
     timestamps = []
-    
-    current_ms = 0
-    while current_ms < duration_ms and len(frames) < max_frames:
-        cap.set(cv2.CAP_PROP_POS_MSEC, current_ms)
+
+    next_sample_ms = 0.0
+    frame_idx = 0
+    while len(frames) < max_frames:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        timestamps.append(current_ms)
-        current_ms += interval_ms
+
+        current_ms = frame_idx * 1000.0 / max(fps, 1e-6)
+        if current_ms + 1e-6 >= next_sample_ms:
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            timestamps.append(current_ms)
+            next_sample_ms += interval_ms
+
+        frame_idx += 1
     
     cap.release()
     
@@ -98,12 +103,12 @@ def _reencode_h264(input_path, output_path):
         ffmpeg, '-y',
         '-i', input_path,
         '-c:v', 'libx264',
-        '-preset', 'fast',
+        '-preset', 'veryfast',
         '-crf', '23',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
         output_path
-    ], check=True, capture_output=True)
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # Remove the raw temp file
     if os.path.exists(input_path):
         os.remove(input_path)

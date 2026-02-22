@@ -2,9 +2,12 @@
 TerrainAI Backend — Velocity Estimator
 Estimates UGV velocity from consecutive video frames using sparse optical flow
 (Lucas-Kanade). The estimated velocity drives adaptive model selection:
-  - Low velocity  (< 15 px/s)  → mit_b3  (accurate model)
-  - Mid velocity  (< 40 px/s)  → mit_b1  (balanced model)
-  - High velocity (>= 40 px/s) → mit_b0  (fast / real-time model)
+    - Low velocity   → accurate-first
+    - Mid velocity   → balanced-first
+    - High velocity  → fast-first
+
+Usage balancing nudges selection toward near-equal usage of all 3 models
+while still respecting velocity-dependent priority.
 """
 import cv2
 import numpy as np
@@ -74,11 +77,24 @@ def estimate_velocity(prev_frame_rgb, curr_frame_rgb, dt=0.2):
         prev_roi, curr_roi, prev_pts, None, **lk_params
     )
 
-    good_old = prev_pts[status.ravel() == 1]
-    good_new = curr_pts[status.ravel() == 1]
+    if curr_pts is None or status is None:
+        return 0.0, 0.0, 0
+
+    valid_mask = status.ravel() == 1
+    good_old = prev_pts[valid_mask]
+    good_new = curr_pts[valid_mask]
+
+    if good_old.size == 0 or good_new.size == 0:
+        return 0.0, 0.0, 0
+
+    good_old = good_old.reshape(-1, 2)
+    good_new = good_new.reshape(-1, 2)
 
     if len(good_old) == 0:
         return 0.0, 0.0, 0
+
+    if dt <= 0:
+        dt = 1e-6
 
     displacements = np.sqrt(
         (good_new[:, 0] - good_old[:, 0]) ** 2
@@ -96,8 +112,23 @@ def estimate_velocity(prev_frame_rgb, curr_frame_rgb, dt=0.2):
 # ---------------------------------------------------------------------------
 
 # Thresholds (pixels / second) — tweak as needed for your camera / resolution
-VELOCITY_LOW = 15.0   # Below this → scene is nearly static → use best model
-VELOCITY_HIGH = 40.0  # Above this → fast motion → use lightest model
+VELOCITY_LOW = 12.0
+VELOCITY_MID = 24.0
+VELOCITY_HIGH = 40.0
+
+MODEL_NAME_MAP = {
+    "mit_b3": "FPN + MiT-B3",
+    "mit_b1": "DeepLabV3+ + EfficientNet-B4",
+    "mit_b0": "Linknet + MobileNetV2",
+}
+
+# Higher number = more accurate (used to set low/mid velocity priorities).
+ACCURACY_PRIORITY = {
+    "mit_b3": 3,
+    "mit_b1": 2,
+}
+LOW_SPEED_MODEL = max(ACCURACY_PRIORITY, key=ACCURACY_PRIORITY.get)
+MID_SPEED_MODEL = "mit_b1" if LOW_SPEED_MODEL == "mit_b3" else "mit_b3"
 
 
 def select_model_by_velocity(velocity):
@@ -112,11 +143,58 @@ def select_model_by_velocity(velocity):
         Human-readable label: 'accurate', 'balanced', or 'fast'.
     """
     if velocity < VELOCITY_LOW:
-        return "mit_b3", "accurate"
+        return LOW_SPEED_MODEL, "accurate"
+    elif velocity < VELOCITY_MID:
+        return MID_SPEED_MODEL, "balanced"
     elif velocity < VELOCITY_HIGH:
-        return "mit_b1", "balanced"
+        return "mit_b0", "fast"
     else:
         return "mit_b0", "fast"
+
+
+def _candidates_for_velocity(velocity):
+    """Return ordered candidate model keys for the given velocity bucket."""
+    if velocity < VELOCITY_LOW:
+        return [LOW_SPEED_MODEL, MID_SPEED_MODEL, "mit_b0"]
+    if velocity < VELOCITY_MID:
+        return [MID_SPEED_MODEL, LOW_SPEED_MODEL, "mit_b0"]
+    if velocity < VELOCITY_HIGH:
+        return ["mit_b0", "mit_b1", "mit_b3"]
+    return ["mit_b0", "mit_b1", "mit_b3"]
+
+
+def _tier_for_key(model_key):
+    if model_key == "mit_b3":
+        return "accurate"
+    if model_key == "mit_b1":
+        return "balanced"
+    return "fast"
+
+
+def _select_balanced_model(velocity, usage_counts, frame_index):
+    """Select model with velocity-aware priority and equal-usage pressure."""
+    candidates = _candidates_for_velocity(velocity)
+    target_per_model = (frame_index + 1) / 3.0
+
+    best_key = candidates[0]
+    best_score = -1e9
+    for priority, model_key in enumerate(candidates):
+        deficit = target_per_model - usage_counts[model_key]
+        # Higher deficit => model is underused and should be favored.
+        # Lower priority index => better fit for current velocity.
+        score = (2.0 * deficit) - (0.2 * priority)
+        if score > best_score:
+            best_score = score
+            best_key = model_key
+    return best_key
+
+
+def get_velocity_thresholds():
+    return {
+        "low": VELOCITY_LOW,
+        "mid": VELOCITY_MID,
+        "high": VELOCITY_HIGH,
+    }
 
 
 def estimate_velocities_for_frames(frames_rgb, dt=0.2):
@@ -133,6 +211,7 @@ def estimate_velocities_for_frames(frames_rgb, dt=0.2):
     """
     n = len(frames_rgb)
     results = []
+    usage_counts = {"mit_b3": 0, "mit_b1": 0, "mit_b0": 0}
 
     for i in range(n):
         if i == 0:
@@ -140,7 +219,9 @@ def estimate_velocities_for_frames(frames_rgb, dt=0.2):
         else:
             vel, disp, pts = estimate_velocity(frames_rgb[i - 1], frames_rgb[i], dt=dt)
 
-        model_key, tier = select_model_by_velocity(vel)
+        model_key = _select_balanced_model(vel, usage_counts, i)
+        usage_counts[model_key] += 1
+        tier = _tier_for_key(model_key)
 
         results.append({
             "frame_index": i,
@@ -148,6 +229,7 @@ def estimate_velocities_for_frames(frames_rgb, dt=0.2):
             "displacement_px": round(disp, 2),
             "tracked_points": pts,
             "model_key": model_key,
+            "model_name": MODEL_NAME_MAP.get(model_key, model_key),
             "model_tier": tier,
         })
 
