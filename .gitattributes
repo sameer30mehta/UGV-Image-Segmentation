@@ -1,0 +1,1 @@
+Perpetual-Motion-Squad/backend/weights/*.pth filter=lfs diff=lfs merge=lfs -text

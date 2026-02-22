@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments and env setup scripts
+ENV_SETUP/
+venv/
+env/
+.venv/
+
+# Dataset and large folders
+Offroad_Segmentation_testImages/
+Offroad_Segmentation_Training_Dataset/
+dataset/
+test_results/
+
+# Model weights (exclude for now)
+*.pth
+best_segformer_model.pth
+
+# Exclude visualize script for now
+visualize.py
+
+# Misc
+.vscode/
+*.log

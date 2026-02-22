@@ -1,0 +1,11 @@
+torch
+torchvision
+segmentation-models-pytorch
+timm
+albumentations
+opencv-python-headless
+numpy<2
+fastapi
+uvicorn[standard]
+python-multipart
+imageio-ffmpeg

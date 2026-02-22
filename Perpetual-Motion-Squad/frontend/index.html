@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TerrainAI — Intelligent Terrain Analysis</title>
+    <meta name="description"
+        content="AI-powered semantic segmentation for autonomous UGV navigation in off-road environments">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- ===== LOADING SCREEN ===== -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-logo">TerrainAI</div>
+        <div class="loading-line"></div>
+        <div class="loading-sub">Initializing Control Systems</div>
+    </div>
+
+    <!-- ===== CURSOR GLOW ===== -->
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- ===== STARFIELD ===== -->
+    <div class="starfield" id="starfield"></div>
+
+    <!-- ===== GRID OVERLAY ===== -->
+    <div class="grid-overlay"></div>
+
+    <!-- ===== DUST PARTICLES ===== -->
+    <div class="particles" id="particles"></div>
+
+    <!-- ===== AMBIENT BACKGROUND ===== -->
+    <div class="ambient-bg">
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="gradient-orb orb-3"></div>
+    </div>
+    <div class="noise-overlay"></div>
+
+    <!-- ===== NAVBAR ===== -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="brand-icon">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <circle cx="14" cy="14" r="12" stroke="url(#bGrad)" stroke-width="1.5" fill="none" opacity="0.6"/>
+                    <circle cx="14" cy="14" r="5" fill="url(#bGrad)" opacity="0.8"/>
+                    <ellipse cx="14" cy="14" rx="12" ry="5" stroke="url(#bGrad)" stroke-width="0.8" fill="none" opacity="0.3" transform="rotate(-25 14 14)"/>
+                    <defs>
+                        <linearGradient id="bGrad" x1="0" y1="0" x2="28" y2="28">
+                            <stop offset="0%" stop-color="#d4a574"/>
+                            <stop offset="100%" stop-color="#e8622d"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </span>
+            <span class="brand-name">Terrain<span class="brand-accent">AI</span></span>
+        </div>
+        <div class="nav-status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <div class="nav-links">
+            <button class="nav-btn active" data-section="analyze">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                Analyze
+            </button>
+            <button class="nav-btn" data-section="video">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+                Video
+            </button>
+            <button class="nav-btn" data-section="models">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                Models
+            </button>
+            <button class="nav-btn" data-section="finetune">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+                Fine-Tune
+            </button>
+        </div>
+    </nav>
+
+    <!-- ===== HERO ===== -->
+    <section class="hero" id="hero">
+        <!-- Horizon Line -->
+        <div class="horizon-line"></div>
+
+        <!-- Mars Planet -->
+        <div class="mars-planet-wrap">
+            <div class="mars-planet"></div>
+        </div>
+
+        <!-- Rover SVG -->
+        <div class="rover-wrap">
+            <svg class="rover-svg" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Rover body -->
+                <rect x="40" y="35" width="120" height="40" rx="6" fill="rgba(212,165,116,0.08)" stroke="rgba(232,98,45,0.3)" stroke-width="1"/>
+                <!-- Antenna mast -->
+                <line x1="140" y1="35" x2="150" y2="10" stroke="rgba(232,98,45,0.4)" stroke-width="1"/>
+                <circle cx="150" cy="8" r="3" fill="rgba(232,98,45,0.5)"/>
+                <!-- Camera head -->
+                <rect x="60" y="20" width="30" height="18" rx="3" fill="rgba(212,165,116,0.06)" stroke="rgba(232,98,45,0.3)" stroke-width="0.8"/>
+                <circle cx="75" cy="29" r="4" stroke="rgba(232,98,45,0.5)" stroke-width="0.8" fill="none"/>
+                <circle cx="75" cy="29" r="1.5" fill="rgba(232,98,45,0.4)"/>
+                <!-- Neck -->
+                <line x1="75" y1="38" x2="75" y2="35" stroke="rgba(232,98,45,0.3)" stroke-width="1"/>
+                <!-- Solar panel -->
+                <rect x="100" y="25" width="40" height="8" rx="1" fill="rgba(74,222,128,0.05)" stroke="rgba(74,222,128,0.2)" stroke-width="0.5"/>
+                <line x1="110" y1="25" x2="110" y2="33" stroke="rgba(74,222,128,0.1)" stroke-width="0.3"/>
+                <line x1="120" y1="25" x2="120" y2="33" stroke="rgba(74,222,128,0.1)" stroke-width="0.3"/>
+                <line x1="130" y1="25" x2="130" y2="33" stroke="rgba(74,222,128,0.1)" stroke-width="0.3"/>
+                <!-- Wheels (rocker–bogie) -->
+                <line x1="55" y1="75" x2="45" y2="85" stroke="rgba(180,140,100,0.3)" stroke-width="1.5"/>
+                <line x1="55" y1="75" x2="75" y2="87" stroke="rgba(180,140,100,0.3)" stroke-width="1.5"/>
+                <line x1="145" y1="75" x2="155" y2="85" stroke="rgba(180,140,100,0.3)" stroke-width="1.5"/>
+                <line x1="145" y1="75" x2="125" y2="87" stroke="rgba(180,140,100,0.3)" stroke-width="1.5"/>
+                <circle cx="45" cy="90" r="10" fill="rgba(140,80,50,0.06)" stroke="rgba(232,98,45,0.25)" stroke-width="1"/>
+                <circle cx="75" cy="92" r="10" fill="rgba(140,80,50,0.06)" stroke="rgba(232,98,45,0.25)" stroke-width="1"/>
+                <circle cx="125" cy="92" r="10" fill="rgba(140,80,50,0.06)" stroke="rgba(232,98,45,0.25)" stroke-width="1"/>
+                <circle cx="155" cy="90" r="10" fill="rgba(140,80,50,0.06)" stroke="rgba(232,98,45,0.25)" stroke-width="1"/>
+                <!-- Wheel spokes -->
+                <circle cx="45" cy="90" r="4" stroke="rgba(232,98,45,0.15)" stroke-width="0.5" fill="none"/>
+                <circle cx="75" cy="92" r="4" stroke="rgba(232,98,45,0.15)" stroke-width="0.5" fill="none"/>
+                <circle cx="125" cy="92" r="4" stroke="rgba(232,98,45,0.15)" stroke-width="0.5" fill="none"/>
+                <circle cx="155" cy="90" r="4" stroke="rgba(232,98,45,0.15)" stroke-width="0.5" fill="none"/>
+                <!-- Body details -->
+                <rect x="50" y="50" width="8" height="5" rx="1" fill="rgba(232,98,45,0.15)"/>
+                <rect x="62" y="50" width="8" height="5" rx="1" fill="rgba(74,222,128,0.15)"/>
+                <rect x="74" y="50" width="8" height="5" rx="1" fill="rgba(232,98,45,0.15)"/>
+            </svg>
+        </div>
+
+        <!-- Floating markers (+) -->
+        <div class="float-marker" style="top:15%;left:8%;"></div>
+        <div class="float-marker" style="top:70%;left:20%;"></div>
+        <div class="float-marker" style="top:30%;right:35%;"></div>
+        <div class="float-marker" style="top:55%;left:45%;"></div>
+        <div class="float-marker" style="top:20%;right:15%;"></div>
+
+        <div class="hero-content reveal" id="heroContent">
+            <div class="hero-badge">AI-Powered Terrain Intelligence</div>
+            <h1 class="hero-title">
+                <span class="title-line">Inference</span>
+                <span class="title-line gradient-text">Control Center</span>
+            </h1>
+            <p class="hero-subtitle">AI-powered semantic segmentation for autonomous UGV navigation.<br>Upload any
+                terrain image or video — get instant, explainable results.</p>
+            <div class="hero-cta">
+                <button class="btn-primary" onclick="document.getElementById('uploadZone').scrollIntoView({behavior:'smooth'})">
+                    <span class="btn-glow"></span>
+                    Begin Analysis
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+            <div class="hero-stats">
+                <div class="stat-card"><span class="stat-value count-up" id="statClasses" data-target="6">0</span><span
+                        class="stat-label">Terrain Classes</span></div>
+                <div class="stat-card"><span class="stat-value" id="statModel">MiT-B3</span><span
+                        class="stat-label">Active Model</span></div>
+                <div class="stat-card"><span class="stat-value" id="statDevice">—</span><span
+                        class="stat-label">Compute</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main-content">
+
+        <!-- ===== SECTION: ANALYZE ===== -->
+        <section class="section active" id="section-analyze">
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-scan-line"></div>
+                <!-- Default state -->
+                <div class="upload-default" id="uploadDefault">
+                    <div class="upload-icon">
+                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                    </div>
+                    <h3>Drop an image here</h3>
+                    <p>or click to browse &middot; PNG, JPG, TIFF supported</p>
+                </div>
+                <!-- Preview state (hidden initially) -->
+                <div class="upload-preview hidden" id="uploadPreview">
+                    <img id="previewImage" class="preview-img" alt="Preview">
+                    <div class="preview-info">
+                        <span class="preview-name" id="previewName">image.jpg</span>
+                        <span class="preview-dims" id="previewDims">1920 × 1080</span>
+                    </div>
+                    <button class="btn-analyze" id="btnAnalyze">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        Analyze Terrain
+                    </button>
+                    <button class="btn-change" id="btnChange">Change Image</button>
+                </div>
+                <input type="file" id="imageInput" accept="image/*" hidden>
+            </div>
+
+            <!-- ML Inference Pipeline -->
+            <div class="ml-pipeline hidden" id="mlPipeline">
+                <h2 class="section-title">
+                    <span class="title-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </span>
+                    Inference Pipeline
+                </h2>
+                <div class="ml-pipeline-track">
+                    <div class="ml-step" data-step="1">
+                        <div class="ml-step-connector"></div>
+                        <div class="ml-step-node">
+                            <div class="ml-step-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                            </div>
+                        </div>
+                        <div class="ml-step-label">Upload</div>
+                        <div class="ml-step-desc">Validate &amp; load</div>
+                    </div>
+                    <div class="ml-step" data-step="2">
+                        <div class="ml-step-connector"></div>
+                        <div class="ml-step-node">
+                            <div class="ml-step-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                            </div>
+                        </div>
+                        <div class="ml-step-label">Preprocess</div>
+                        <div class="ml-step-desc">CLAHE &amp; resize</div>
+                    </div>
+                    <div class="ml-step" data-step="3">
+                        <div class="ml-step-connector"></div>
+                        <div class="ml-step-node">
+                            <div class="ml-step-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            </div>
+                        </div>
+                        <div class="ml-step-label">Inference</div>
+                        <div class="ml-step-desc">MiT-B3 forward pass</div>
+                    </div>
+                    <div class="ml-step" data-step="4">
+                        <div class="ml-step-connector"></div>
+                        <div class="ml-step-node">
+                            <div class="ml-step-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            </div>
+                        </div>
+                        <div class="ml-step-label">Postprocess</div>
+                        <div class="ml-step-desc">Mask &amp; safety map</div>
+                    </div>
+                    <div class="ml-step" data-step="5">
+                        <div class="ml-step-connector"></div>
+                        <div class="ml-step-node">
+                            <div class="ml-step-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            </div>
+                        </div>
+                        <div class="ml-step-label">Results</div>
+                        <div class="ml-step-desc">Visualize &amp; explain</div>
+                    </div>
+                    <!-- Pipeline Rover -->
+                    <div class="pipeline-rover" id="pipelineRover">
+                        <svg class="pipeline-rover-svg" viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="40" y="35" width="120" height="40" rx="6" fill="rgba(212,165,116,0.15)" stroke="rgba(232,98,45,0.6)" stroke-width="1.5"/>
+                            <line x1="140" y1="35" x2="148" y2="14" stroke="rgba(232,98,45,0.5)" stroke-width="1"/>
+                            <circle cx="148" cy="11" r="3" fill="rgba(232,98,45,0.6)"/>
+                            <rect x="58" y="22" width="26" height="16" rx="3" fill="rgba(212,165,116,0.08)" stroke="rgba(232,98,45,0.4)" stroke-width="0.8"/>
+                            <circle cx="71" cy="30" r="3.5" stroke="rgba(232,98,45,0.6)" stroke-width="0.8" fill="none"/>
+                            <circle cx="71" cy="30" r="1.2" fill="rgba(232,98,45,0.5)"/>
+                            <line x1="50" y1="75" x2="43" y2="86" stroke="rgba(180,140,100,0.4)" stroke-width="1.5"/>
+                            <line x1="50" y1="75" x2="70" y2="88" stroke="rgba(180,140,100,0.4)" stroke-width="1.5"/>
+                            <line x1="150" y1="75" x2="157" y2="86" stroke="rgba(180,140,100,0.4)" stroke-width="1.5"/>
+                            <line x1="150" y1="75" x2="130" y2="88" stroke="rgba(180,140,100,0.4)" stroke-width="1.5"/>
+                            <circle cx="43" cy="91" r="9" fill="rgba(140,80,50,0.08)" stroke="rgba(232,98,45,0.4)" stroke-width="1" class="rover-wheel"/>
+                            <circle cx="70" cy="93" r="9" fill="rgba(140,80,50,0.08)" stroke="rgba(232,98,45,0.4)" stroke-width="1" class="rover-wheel"/>
+                            <circle cx="130" cy="93" r="9" fill="rgba(140,80,50,0.08)" stroke="rgba(232,98,45,0.4)" stroke-width="1" class="rover-wheel"/>
+                            <circle cx="157" cy="91" r="9" fill="rgba(140,80,50,0.08)" stroke="rgba(232,98,45,0.4)" stroke-width="1" class="rover-wheel"/>
+                        </svg>
+                        <div class="rover-exhaust" id="roverExhaust"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cinematic Preprocessing Pipeline Strip -->
+            <div class="pipeline-section hidden" id="pipelineSection">
+                <h2 class="section-title">
+                    <span class="title-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                    </span>
+                    Preprocessing Pipeline
+                    <span class="pipeline-film-label">FILM REEL</span>
+                </h2>
+                <div class="pipeline-filmstrip" id="pipelineTrack"></div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="results-section hidden" id="resultsSection">
+                <h2 class="section-title">
+                    <span class="title-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    </span>
+                    Segmentation Results
+                    <span class="inference-badge" id="inferenceBadge"></span>
+                    <span class="inference-history" id="inferenceHistory"></span>
+                </h2>
+
+                <!-- Safety Score Gauge -->
+                <div class="safety-gauge" id="safetyGauge">
+                    <div class="safety-gauge-title">Terrain Safety Assessment</div>
+                    <div class="safety-bars">
+                        <div class="safety-bar-item safe">
+                            <div class="safety-bar-label">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                Safe
+                            </div>
+                            <div class="safety-bar-track">
+                                <div class="safety-bar-fill safe-fill" id="safeBarFill" style="width:0%"></div>
+                            </div>
+                            <span class="safety-bar-pct" id="safePct">0%</span>
+                        </div>
+                        <div class="safety-bar-item caution">
+                            <div class="safety-bar-label">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Caution
+                            </div>
+                            <div class="safety-bar-track">
+                                <div class="safety-bar-fill caution-fill" id="cautionBarFill" style="width:0%"></div>
+                            </div>
+                            <span class="safety-bar-pct" id="cautionPct">0%</span>
+                        </div>
+                        <div class="safety-bar-item obstacle">
+                            <div class="safety-bar-label">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                Obstacle
+                            </div>
+                            <div class="safety-bar-track">
+                                <div class="safety-bar-fill obstacle-fill" id="obstacleBarFill" style="width:0%"></div>
+                            </div>
+                            <span class="safety-bar-pct" id="obstaclePct">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-tabs">
+                    <button class="result-tab active" data-view="compare">Compare</button>
+                    <button class="result-tab" data-view="overlay">Overlay</button>
+                    <button class="result-tab" data-view="mask">Mask</button>
+                    <button class="result-tab" data-view="safety">Safety Map</button>
+                    <button class="result-tab" data-view="gradcam">GradCAM</button>
+                    <button class="result-tab" data-view="confidence">Confidence</button>
+                </div>
+
+                <div class="result-display">
+                    <!-- Before/After Comparison Slider -->
+                    <div class="comparison-slider-wrap" id="comparisonWrap" style="grid-column: 1/-1;">
+                        <div class="comparison-slider" id="comparisonSlider">
+                            <img id="compareOriginal" class="compare-img compare-before" alt="Original">
+                            <div class="compare-after-wrap" id="compareAfterWrap">
+                                <img id="compareAfter" class="compare-img compare-after" alt="Segmented">
+                            </div>
+                            <div class="compare-handle" id="compareHandle">
+                                <div class="compare-handle-line"></div>
+                                <div class="compare-handle-circle">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8l4 4-4 4M6 8l-4 4 4 4"/></svg>
+                                </div>
+                                <div class="compare-handle-line"></div>
+                            </div>
+                            <div class="compare-label-left">Original</div>
+                            <div class="compare-label-right">Segmented</div>
+                        </div>
+                    </div>
+
+                    <!-- Standard view (hidden initially, shown when not in compare mode) -->
+                    <div class="result-card tilt-card hidden" id="resultOriginalCard">
+                        <div class="result-label">Original</div>
+                        <img id="resultOriginal" class="result-img" alt="Original">
+                    </div>
+                    <div class="result-card primary tilt-card hidden" id="resultOutputCard" style="position:relative; cursor:crosshair;">
+                        <div class="result-label" id="resultViewLabel">Segmented Overlay</div>
+                        <img id="resultOutput" class="result-img" alt="Result">
+                        <!-- Confidence heatmap overlay -->
+                        <canvas id="confidenceCanvas" class="confidence-overlay hidden" width="64" height="64"></canvas>
+                        <div class="confidence-tooltip hidden" id="confTooltip">
+                            <div class="conf-class" id="confClass">--</div>
+                            <div class="conf-value" id="confValue">--%</div>
+                        </div>
+                        <div class="loading-overlay hidden" id="gradcamLoading">
+                            <div class="spinner"></div>
+                            <span>Generating GradCAM...</span>
+                        </div>
+                        <div class="gradcam-caption hidden" id="gradcamCaption"></div>
+                    </div>
+                </div>
+
+                <!-- Uncertainty Toggle -->
+                <div class="uncertainty-toggle-wrap" id="uncertaintyToggleWrap">
+                    <button class="uncertainty-toggle" id="uncertaintyToggle">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        Show Uncertainty Map
+                    </button>
+                </div>
+
+                <div class="class-legend" id="classLegend"></div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card tilt-card">
+                        <h3>Class Distribution</h3>
+                        <div class="chart-wrap">
+                            <canvas id="distChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="metric-card tilt-card">
+                        <h3>Model Recommendation</h3>
+                        <div id="recommendationPanel" class="recommendation-panel"></div>
+                    </div>
+                </div>
+
+                <!-- Multi-Model Comparison -->
+                <div class="model-comparison-section" id="modelComparisonSection">
+                    <h2 class="section-title">
+                        <span class="title-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        </span>
+                        Multi-Model Comparison
+                    </h2>
+                    <button class="btn-compare" id="btnCompareModels">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg>
+                        Compare All Models
+                    </button>
+                    <div class="compare-grid hidden" id="compareModelsGrid"></div>
+                </div>
+
+                <!-- ===== XAI FEATURES CONTAINER ===== -->
+                <div class="xai-features hidden" id="xaiFeatures">
+                    <div class="xai-header">
+                        <h2 class="section-title">
+                            <span class="title-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                            </span>
+                            Explainability &amp; Analysis Tools
+                        </h2>
+                    </div>
+                    <div class="xai-tabs" id="xaiTabs">
+                        <button class="xai-tab active" data-xai="routeShap">Route SHAP</button>
+                        <button class="xai-tab" data-xai="whatif">What If</button>
+                        <button class="xai-tab" data-xai="failureModes">Failure Modes</button>
+                        <button class="xai-tab" data-xai="robustness">Shake Test</button>
+                        <button class="xai-tab" data-xai="routePlanner">Route Planner</button>
+                        <button class="xai-tab" data-xai="disagreement">Disagreement</button>
+                        <button class="xai-tab" data-xai="missionReport">Mission Report</button>
+                    </div>
+                    <div class="xai-panels" id="xaiPanels">
+
+                        <!-- FEATURE 1: Route-Level SHAP -->
+                        <div class="xai-panel active" id="routeShapPanel">
+                            <h3 class="xai-panel-title">Route Safety Analysis <span class="xai-badge">SHAP</span></h3>
+                            <p class="xai-desc">Click points on the safety map to draw a route. Each terrain class contribution to route risk is quantified.</p>
+                            <div class="route-shap-layout">
+                                <div class="route-canvas-wrap">
+                                    <img id="routeShapBaseImg" class="route-base-img" alt="Safety Map">
+                                    <canvas id="routeShapCanvas" class="route-overlay-canvas"></canvas>
+                                    <div class="route-controls">
+                                        <button class="btn-xai-sm" id="routeShapUndo">← Undo</button>
+                                        <button class="btn-xai-sm" id="routeShapClear">Clear</button>
+                                        <button class="btn-xai-primary" id="routeShapAnalyze">Analyze Route</button>
+                                    </div>
+                                </div>
+                                <div class="route-shap-results" id="routeShapResults">
+                                    <div class="xai-placeholder">Click points on the image to draw a route, then click Analyze.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 2: What-If Scenario Editor -->
+                        <div class="xai-panel hidden" id="whatifPanel">
+                            <h3 class="xai-panel-title">Scenario Editor <span class="xai-badge">SIMULATION</span></h3>
+                            <p class="xai-desc">Apply lighting and noise transformations to simulate different conditions, then re-run inference.</p>
+                            <div class="whatif-layout">
+                                <div class="whatif-controls">
+                                    <div class="whatif-slider-group">
+                                        <label class="whatif-label">Brightness <span class="whatif-val" id="whatifBrightnessVal">0</span></label>
+                                        <input type="range" id="whatifBrightness" min="-100" max="100" value="0" class="whatif-slider">
+                                    </div>
+                                    <div class="whatif-slider-group">
+                                        <label class="whatif-label">Contrast <span class="whatif-val" id="whatifContrastVal">1.0×</span></label>
+                                        <input type="range" id="whatifContrast" min="50" max="200" value="100" class="whatif-slider">
+                                    </div>
+                                    <div class="whatif-slider-group">
+                                        <label class="whatif-label">Noise <span class="whatif-val" id="whatifNoiseVal">0</span></label>
+                                        <input type="range" id="whatifNoise" min="0" max="80" value="0" class="whatif-slider">
+                                    </div>
+                                    <div class="whatif-slider-group">
+                                        <label class="whatif-label">Blur <span class="whatif-val" id="whatifBlurVal">0px</span></label>
+                                        <input type="range" id="whatifBlur" min="0" max="16" value="0" class="whatif-slider">
+                                    </div>
+                                    <div class="whatif-btn-row">
+                                        <button class="btn-xai-primary" id="whatifReanalyze">Re-Analyze</button>
+                                        <button class="btn-xai-sm" id="whatifReset">Reset</button>
+                                    </div>
+                                </div>
+                                <div class="whatif-comparison">
+                                    <div class="whatif-panel">
+                                        <div class="whatif-panel-label">Modified Preview</div>
+                                        <canvas id="whatifCanvas" class="whatif-canvas"></canvas>
+                                    </div>
+                                    <div class="whatif-panel">
+                                        <div class="whatif-panel-label">Re-analysis Result</div>
+                                        <div id="whatifResultWrap" class="whatif-result-wrap">
+                                            <div class="xai-placeholder">Adjust sliders and click Re-Analyze</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="whatif-delta hidden" id="whatifDelta"></div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 3: Bias & Failure Mode Explorer -->
+                        <div class="xai-panel hidden" id="failureModesPanel">
+                            <h3 class="xai-panel-title">Failure Mode Analysis <span class="xai-badge">DIAGNOSTIC</span></h3>
+                            <p class="xai-desc">Automatically identifies regions where the model is uncertain or likely to make errors.</p>
+                            <div class="failure-summary" id="failureSummary"></div>
+                            <div class="failure-cards" id="failureCards">
+                                <div class="xai-placeholder">Run an analysis to detect failure patterns.</div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 4: Robustness Shake Test -->
+                        <div class="xai-panel hidden" id="robustnessPanel">
+                            <h3 class="xai-panel-title">Robustness Shake Test <span class="xai-badge">3×3 GRID</span></h3>
+                            <p class="xai-desc">Test model stability against noise, blur, and brightness perturbations at 3 severity levels.</p>
+                            <button class="btn-xai-primary" id="btnShakeTest">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                Run Shake Test
+                            </button>
+                            <div class="shake-container hidden" id="shakeContainer">
+                                <div class="shake-axis-labels">
+                                    <div class="shake-axis-col-labels">
+                                        <span>Low</span><span>Medium</span><span>High</span>
+                                    </div>
+                                </div>
+                                <div class="shake-grid" id="shakeGrid"></div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 5: Route Planner + Risk Budget -->
+                        <div class="xai-panel hidden" id="routePlannerPanel">
+                            <h3 class="xai-panel-title">Autonomous Route Planner <span class="xai-badge">A*</span></h3>
+                            <p class="xai-desc">Click to set start (green) and end (red) waypoints. Three optimal routes are computed using A* pathfinding.</p>
+                            <div class="planner-layout">
+                                <div class="planner-canvas-wrap">
+                                    <img id="plannerBaseImg" class="planner-base-img" alt="Safety Map">
+                                    <canvas id="plannerCanvas" class="planner-overlay-canvas"></canvas>
+                                    <div class="planner-hint" id="plannerHint">Click to set start point</div>
+                                </div>
+                                <div class="planner-results" id="plannerResults">
+                                    <div class="xai-placeholder">Set start and end points on the map to compute routes.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 6: Disagreement Heatmap -->
+                        <div class="xai-panel hidden" id="disagreementPanel">
+                            <h3 class="xai-panel-title">Model Disagreement Heatmap <span class="xai-badge">3 MODELS</span></h3>
+                            <p class="xai-desc">Visualizes where MiT-B0, B1, and B3 predict different terrain classes — revealing low-consensus regions.</p>
+                            <button class="btn-xai-primary" id="btnDisagreement">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                                Compute Disagreement
+                            </button>
+                            <div class="disagreement-results hidden" id="disagreementResults">
+                                <div class="disagreement-stats" id="disagreementStats"></div>
+                                <div class="disagreement-grid" id="disagreementGrid"></div>
+                            </div>
+                        </div>
+
+                        <!-- FEATURE 8: Mission Briefing Report -->
+                        <div class="xai-panel hidden" id="missionReportPanel">
+                            <h3 class="xai-panel-title">Mission Briefing Report <span class="xai-badge">EXPORT</span></h3>
+                            <p class="xai-desc">Generate a downloadable mission-briefing PNG summarizing all terrain analysis results.</p>
+                            <button class="btn-xai-primary" id="btnGenerateReport">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                Generate Briefing
+                            </button>
+                            <div class="report-preview hidden" id="reportPreview">
+                                <canvas id="reportCanvas" class="report-canvas"></canvas>
+                                <button class="btn-xai-sm" id="btnDownloadReport">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                                    Download PNG
+                                </button>
+                            </div>
+                        </div>
+
+                    </div><!-- end xai-panels -->
+                </div><!-- end xai-features -->
+
+            </div>
+        </section>
+
+        <!-- ===== SECTION: VIDEO ===== -->
+        <section class="section" id="section-video">
+            <div class="upload-zone" id="videoUploadZone">
+                <div class="upload-scan-line"></div>
+                <div class="upload-icon">
+                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.2">
+                        <polygon points="5,3 19,12 5,21" />
+                    </svg>
+                </div>
+                <h3>Drop a video here</h3>
+                <p>or click to browse &middot; MP4, AVI, MOV supported (5-10s recommended)</p>
+                <input type="file" id="videoInput" accept="video/*" hidden>
+            </div>
+
+            <div class="video-pipeline hidden" id="videoPipeline">
+                <h2 class="section-title">
+                    <span class="title-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5,3 19,12 5,21"/></svg>
+                    </span>
+                    Video Processing
+                </h2>
+                <div class="video-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="videoProgressFill"></div>
+                    </div>
+                    <span id="videoProgressText">Processing frames...</span>
+                </div>
+            </div>
+
+            <div class="video-results hidden" id="videoResults">
+                <h2 class="section-title">
+                    <span class="title-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                    </span>
+                    Segmented Video
+                </h2>
+                <div class="video-stats" id="videoStats"></div>
+
+                <!-- Velocity-Adaptive Model Selection Dashboard -->
+                <div class="velocity-dashboard" id="velocityDashboard" style="display:none;">
+                    <h3 style="margin:0 0 12px 0; font-size:15px; display:flex; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 6v6l4 2"/></svg>
+                        Velocity-Adaptive Model Selection
+                    </h3>
+                    <div class="velocity-summary" id="velocitySummary"></div>
+                    <div class="velocity-chart-wrap">
+                        <canvas id="velocityChart" height="160"></canvas>
+                    </div>
+                    <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; font-size:13px; opacity:0.8;">Per-Frame Details</summary>
+                        <div class="velocity-table-wrap" id="velocityTable" style="max-height:260px; overflow-y:auto; margin-top:8px;"></div>
+                    </details>
+                </div>
+
+                <div class="result-tabs" id="videoTabs">
+                    <button class="result-tab active" data-video="sidebyside">Side-by-Side</button>
+                    <button class="result-tab" data-video="overlay">Overlay</button>
+                    <button class="result-tab" data-video="mask">Mask</button>
+                    <button class="result-tab" data-video="safety">Safety Map</button>
+                    <button class="result-tab" data-video="gradcam">GradCAM</button>
+                </div>
+
+                <div class="video-player-wrap">
+                    <video id="segmentedVideo" controls class="video-player"></video>
+                </div>
+
+                <h3 style="margin-top:20px; font-size:15px; margin-bottom:10px;">Frame Previews</h3>
+                <div class="result-display" style="grid-template-columns: repeat(4, 1fr);" id="videoPreviews"></div>
+            </div>
+        </section>
+
+        <!-- ===== SECTION: MODELS ===== -->
+        <section class="section" id="section-models">
+            <h2 class="section-title">
+                <span class="title-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </span>
+                Model Arsenal
+            </h2>
+            <div class="models-grid" id="modelsGrid"></div>
+        </section>
+
+        <!-- ===== SECTION: FINE-TUNE ===== -->
+        <section class="section" id="section-finetune">
+            <h2 class="section-title">
+                <span class="title-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+                </span>
+                Few-Shot Fine-Tuning
+            </h2>
+            <p class="section-subtitle">Upload up to 10 labeled images to personalize the model for your specific terrain</p>
+            
+            <!-- Upload Instructions -->
+            <div class="finetune-instructions">
+                <div class="instruction-card">
+                    <div class="instruction-number">1</div>
+                    <div class="instruction-content">
+                        <h4>Prepare Images</h4>
+                        <p>Select 1-10 terrain images (PNG/JPG)</p>
+                    </div>
+                </div>
+                <div class="instruction-card">
+                    <div class="instruction-number">2</div>
+                    <div class="instruction-content">
+                        <h4>Upload Masks</h4>
+                        <p>Corresponding segmentation masks (PNG, values 0-9)</p>
+                    </div>
+                </div>
+                <div class="instruction-card">
+                    <div class="instruction-number">3</div>
+                    <div class="instruction-content">
+                        <h4>Fine-Tune</h4>
+                        <p>Model trains for 5 epochs (~30-60s)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Areas -->
+            <div class="finetune-upload-grid">
+                <div class="finetune-upload-card">
+                    <div class="finetune-upload-zone" id="finetuneImagesZone">
+                        <div class="upload-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </div>
+                        <h3>Training Images</h3>
+                        <p id="imagesCount">No files selected</p>
+                        <button class="btn-upload" onclick="document.getElementById('finetuneImagesInput').click()">Browse Images</button>
+                    </div>
+                    <input type="file" id="finetuneImagesInput" accept="image/*" multiple hidden>
+                </div>
+
+                <div class="finetune-upload-card">
+                    <div class="finetune-upload-zone" id="finetuneMasksZone">
+                        <div class="upload-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                        </div>
+                        <h3>Segmentation Masks</h3>
+                        <p id="masksCount">No files selected</p>
+                        <button class="btn-upload" onclick="document.getElementById('finetuneMasksInput').click()">Browse Masks</button>
+                    </div>
+                    <input type="file" id="finetuneMasksInput" accept=".png" multiple hidden>
+                </div>
+            </div>
+
+            <!-- Start Fine-Tuning Button -->
+            <div class="finetune-actions">
+                <button class="btn-primary btn-finetune" id="btnStartFinetune" disabled>
+                    <span class="btn-glow"></span>
+                    Start Fine-Tuning
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                </button>
+            </div>
+
+            <!-- Progress Display -->
+            <div class="finetune-progress hidden" id="finetuneProgress">
+                <h3 class="progress-main-title">Fine-Tuning in Progress</h3>
+                <div class="progress-steps">
+                    <div class="progress-step" id="step1">
+                        <div class="step-icon">
+                            <div class="step-spinner"></div>
+                            <svg class="step-check hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Loading Base Model</div>
+                            <div class="step-desc">Initializing FPN architecture with pretrained weights</div>
+                        </div>
+                    </div>
+                    <div class="progress-step" id="step2">
+                        <div class="step-icon">
+                            <div class="step-spinner"></div>
+                            <svg class="step-check hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Freezing Layers</div>
+                            <div class="step-desc">Freezing encoder & decoder, training only final layer</div>
+                        </div>
+                    </div>
+                    <div class="progress-step" id="step3">
+                        <div class="step-icon">
+                            <div class="step-spinner"></div>
+                            <svg class="step-check hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Preparing Dataset</div>
+                            <div class="step-desc">Loading and preprocessing your images</div>
+                        </div>
+                    </div>
+                    <div class="progress-step" id="step4">
+                        <div class="step-icon">
+                            <div class="step-spinner"></div>
+                            <svg class="step-check hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Training Model</div>
+                            <div class="step-desc">Running 5 epochs with AdamW optimizer</div>
+                        </div>
+                    </div>
+                    <div class="progress-step" id="step5">
+                        <div class="step-icon">
+                            <div class="step-spinner"></div>
+                            <svg class="step-check hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Saving Model</div>
+                            <div class="step-desc">Exporting personalized weights</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Display -->
+            <div class="finetune-results hidden" id="finetuneResults">
+                <div class="results-card">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <h3>Fine-Tuning Complete!</h3>
+                    <p id="resultsMessage">Model saved successfully</p>
+                    <div class="results-info">
+                        <div class="info-item">
+                            <span class="info-label">Model ID:</span>
+                            <span class="info-value" id="modelId">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Images:</span>
+                            <span class="info-value" id="numImages">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Initial Loss:</span>
+                            <span class="info-value" id="initialLoss">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Final Loss:</span>
+                            <span class="info-value" id="finalLoss">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Improvement:</span>
+                            <span class="info-value" id="improvement">—</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Before/After Comparison -->
+                    <div class="comparison-section hidden" id="comparisonSection">
+                        <h4>Model Comparison (GradCAM)</h4>
+                        <div class="comparison-grid">
+                            <div class="comparison-item">
+                                <p class="comparison-label">Base Model</p>
+                                <img id="baseGradcam" alt="Base model attention"/>
+                            </div>
+                            <div class="comparison-item">
+                                <p class="comparison-label">Fine-Tuned Model</p>
+                                <img id="finetunedGradcam" alt="Fine-tuned model attention"/>
+                            </div>
+                        </div>
+                        <p class="comparison-hint">Warmer colors show where the model focuses its attention</p>
+                    </div>
+                    
+                    <div class="results-actions">
+                        <button class="btn-primary" onclick="document.querySelector('[data-section=analyze]').click()">
+                            <span class="btn-glow"></span>
+                            Go to Analyze
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        </button>
+                        <button class="btn-secondary" onclick="resetToBaseModel()">Reset to Base Model</button>
+                    </div>
+                    <p class="custom-model-note">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                        Your custom model is now active and will be used for all inference
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer">
+        <div class="footer-glow"></div>
+        <p>TerrainAI &middot; Semantic Segmentation for Autonomous UGV Navigation &middot; Built with PyTorch &amp; SegFormer</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
