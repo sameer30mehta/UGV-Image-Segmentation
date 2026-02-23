@@ -21,6 +21,8 @@ const state = {
     currentResult: null,
     gradcamData: null,
     distChart: null,
+    safetyChart: null,
+    qualityChart: null,
     inferenceHistory: [],
     uncertaintyVisible: false,
     // XAI state
@@ -530,7 +532,12 @@ function renderResults(data) {
     // Safety gauge
     if (data.safety_percentages) {
         renderSafetyGauge(data.safety_percentages);
+        renderSafetyChart(data.safety_percentages);
     }
+
+    // Quality metrics chart + meta
+    renderQualityChart(data);
+    updateQualityMeta(data);
 
     // Class legend
     const legend = document.getElementById('classLegend');
@@ -570,6 +577,11 @@ function renderResults(data) {
     }
 
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+    return (v && v.trim()) ? v.trim() : fallback;
 }
 
 function renderSafetyGauge(pcts) {
@@ -625,6 +637,121 @@ function renderDistributionChart(distribution) {
             }
         }
     });
+}
+
+function renderSafetyChart(pcts) {
+    const canvas = document.getElementById('safetyChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+    if (state.safetyChart) state.safetyChart.destroy();
+
+    const safe = Number(pcts.safe ?? 0);
+    const caution = Number(pcts.caution ?? 0);
+    const obstacle = Number(pcts.obstacle ?? 0);
+    const neutral = Math.max(0, 100 - safe - caution - obstacle);
+
+    state.safetyChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Safe', 'Caution', 'Obstacle', 'Neutral'],
+            datasets: [{
+                data: [safe, caution, obstacle, neutral],
+                backgroundColor: [
+                    cssVar('--safe', '#4ade80'),
+                    cssVar('--caution', '#fbbf24'),
+                    cssVar('--danger', '#ef4444'),
+                    'rgba(212,165,116,0.18)',
+                ],
+                borderColor: 'rgba(8,8,8,0.9)',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: 'rgba(212,165,116,0.55)',
+                        font: { size: 11, family: 'Inter' },
+                        padding: 8,
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.label}: ${ctx.parsed}%`
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderQualityChart(data) {
+    const canvas = document.getElementById('qualityChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+    if (state.qualityChart) state.qualityChart.destroy();
+
+    const conf = Number(data.confidence_score_pct ?? 0);
+    const high = Number(data.high_confidence_pixels_pct ?? 0);
+    const acc = Number(data.accuracy_estimate_pct ?? 0);
+
+    const accent = cssVar('--mars-400', '#e8622d');
+
+    state.qualityChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Confidence', 'High-Conf Pixels', 'Acc (est)'],
+            datasets: [{
+                label: 'Percent',
+                data: [conf, high, acc],
+                backgroundColor: [
+                    'rgba(232,98,45,0.35)',
+                    'rgba(212,165,116,0.28)',
+                    'rgba(74,222,128,0.22)'
+                ],
+                borderColor: [accent, 'rgba(212,165,116,0.55)', cssVar('--safe', '#4ade80')],
+                borderWidth: 1,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { color: 'rgba(212,165,116,0.55)', font: { size: 11, family: 'Inter' } },
+                    grid: { color: 'rgba(200,130,80,0.06)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { color: 'rgba(212,165,116,0.55)', callback: (v) => `${v}%` },
+                    grid: { color: 'rgba(200,130,80,0.06)' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.parsed.y}%`
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateQualityMeta(data) {
+    const modelEl = document.getElementById('qmModel');
+    const inputEl = document.getElementById('qmInput');
+    const timeEl = document.getElementById('qmTime');
+    if (modelEl) modelEl.textContent = (data.model_used || '—').toUpperCase();
+    if (inputEl) inputEl.textContent = data.input_size || '—';
+    if (timeEl) timeEl.textContent = (data.inference_time_ms != null) ? `${data.inference_time_ms} ms` : '—';
 }
 
 // ============================================================================
@@ -1445,9 +1572,9 @@ function renderRouteShapResults(data) {
     if (!data) return;
     const resultsEl = document.getElementById('routeShapResults');
     const risk = data.normalizedRisk;
-    const riskPct = Math.round(risk * 100);
+    const safetyPct = Math.max(0, Math.min(100, Math.round((1 - risk) * 100)));
     const riskClass = risk < 0.2 ? 'safe' : risk < 0.5 ? 'caution' : 'danger';
-    const riskLabel = risk < 0.2 ? 'Safe' : risk < 0.5 ? 'Caution' : 'High Risk';
+    const safetyLabel = risk < 0.2 ? 'Safe' : risk < 0.5 ? 'Moderate Risk' : 'High Risk';
 
     const maxContrib = Math.max(...data.classBreakdown.map(c => c.contribution), 0.001);
     const bars = data.classBreakdown.map(c => {
@@ -1463,8 +1590,8 @@ function renderRouteShapResults(data) {
     }).join('');
 
     resultsEl.innerHTML = `
-        <div class="route-score-header">Route Risk Score</div>
-        <div class="route-total-risk ${riskClass}">${riskPct}% — ${riskLabel}</div>
+        <div class="route-score-header">Route Safety Score</div>
+        <div class="route-total-risk ${riskClass}">${safetyPct}% — ${safetyLabel}</div>
         <div style="font-size:11px;color:var(--text-3);margin-bottom:16px;font-family:'JetBrains Mono',monospace;">${data.totalSegments} segments · ${data.totalCells} cells sampled</div>
         <div style="font-size:12px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--text-2);margin-bottom:10px;">Class Contributions</div>
         ${bars}
@@ -1915,11 +2042,28 @@ function aStarPathfind(gridCells, gw, gh, start, end, costFn) {
     const fScore = new Float32Array(gw * gh).fill(Infinity);
     const cameFrom = new Int32Array(gw * gh).fill(-1);
     const openSet = new MinHeap();
+
+    // ── Perspective-aware distance scaling ──────────────────────────────
+    // In a forward-facing camera, pixels near the top of the image are
+    // physically farther away → 1 pixel spans more real-world distance.
+    // We model this as a linear depth scale:
+    //   row 0       (farthest)  → scale = PERSPECTIVE_MAX_SCALE
+    //   row gh - 1  (nearest)   → scale = 1.0
+    // This makes the planner prefer near-ground manoeuvres over
+    // far-field detours that look short in pixel space but are large IRL.
+    const PERSPECTIVE_MAX_SCALE = 4.0;
+    const perspScale = (row) => {
+        const t = 1 - row / Math.max(gh - 1, 1);   // 1 at top, 0 at bottom
+        return 1.0 + t * (PERSPECTIVE_MAX_SCALE - 1.0);
+    };
+
+    // Admissible heuristic: use the minimum possible scale (1.0) so we
+    // never overestimate the remaining cost.
     const heuristic = (idx) => {
         const x = idx % gw, y = Math.floor(idx / gw);
-        const ex = end.x, ey = end.y;
-        return Math.sqrt((x - ex) ** 2 + (y - ey) ** 2);
+        return Math.sqrt((x - end.x) ** 2 + (y - end.y) ** 2); // * 1.0
     };
+
     gScore[startIdx] = 0;
     fScore[startIdx] = heuristic(startIdx);
     openSet.push(startIdx, fScore[startIdx]);
@@ -1939,7 +2083,9 @@ function aStarPathfind(gridCells, gw, gh, start, end, costFn) {
             const nx = cx + dx, ny = cy + dy;
             if (nx < 0 || nx >= gw || ny < 0 || ny >= gh) continue;
             const nIdx = ny * gw + nx;
-            const tentative = gScore[current] + moveCost * costFn(gridCells[nIdx]);
+            // Average perspective scale of the two neighbouring rows
+            const pScale = (perspScale(cy) + perspScale(ny)) * 0.5;
+            const tentative = gScore[current] + moveCost * pScale * costFn(gridCells[nIdx]);
             if (tentative < gScore[nIdx]) {
                 cameFrom[nIdx] = current;
                 gScore[nIdx] = tentative;

@@ -6,6 +6,7 @@ import shutil
 import base64
 import tempfile
 import mimetypes
+import json
 from io import BytesIO
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -38,6 +39,12 @@ OUTPUT_DIR = Path("outputs")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Save per-request artifacts (images + metrics JSON) for debugging.
+# OFF by default; enable with SAVE_ARTIFACTS=1.
+SAVE_ARTIFACTS = os.environ.get("SAVE_ARTIFACTS", "0").strip() not in {"0", "false", "False"}
+RUNS_DIR = OUTPUT_DIR / "runs"
+RUNS_DIR.mkdir(exist_ok=True)
+
 # ============================================================================
 # MODEL LOADING
 # ============================================================================
@@ -62,6 +69,9 @@ async def lifespan(app):
         registry.load_model(model_key)
     print(f"  Classes: {NUM_CLASSES}")
     print(f"  Device: {DEVICE}")
+    print(f"  Save artifacts: {'ON' if SAVE_ARTIFACTS else 'OFF'} (env SAVE_ARTIFACTS)")
+    if SAVE_ARTIFACTS:
+        print("  Artifact browser base: http://localhost:8000/outputs/runs/")
     print(f"  Ready at http://localhost:8000\n")
     yield
     # Shutdown
@@ -117,6 +127,53 @@ def read_upload_image(file_bytes):
     if img is None:
         raise HTTPException(400, "Invalid image file")
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+
+def _safe_write_json(path: Path, payload: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def _write_png_rgb(path: Path, image_rgb: np.ndarray):
+    """Write an RGB uint8 image to disk as PNG using OpenCV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(path), bgr)
+
+
+def save_segment_artifacts(
+    run_id: str,
+    image_rgb: np.ndarray,
+    mask_rgb: np.ndarray,
+    overlay_rgb: np.ndarray,
+    safety_rgb: np.ndarray,
+    confidence_rgb: np.ndarray,
+    metrics: dict,
+):
+    """Persist result images + metrics JSON under outputs/runs/<run_id>/.
+
+    Returns a dict of public URLs (via /outputs mount).
+    """
+    run_dir = RUNS_DIR / run_id
+    _write_png_rgb(run_dir / "original.png", image_rgb)
+    _write_png_rgb(run_dir / "mask.png", mask_rgb)
+    _write_png_rgb(run_dir / "overlay.png", overlay_rgb)
+    _write_png_rgb(run_dir / "safety.png", safety_rgb)
+    _write_png_rgb(run_dir / "confidence.png", confidence_rgb)
+    _safe_write_json(run_dir / "metrics.json", metrics)
+
+    base = f"/outputs/runs/{run_id}"
+    return {
+        "run_id": run_id,
+        "dir": base,
+        "original": f"{base}/original.png",
+        "mask": f"{base}/mask.png",
+        "overlay": f"{base}/overlay.png",
+        "safety": f"{base}/safety.png",
+        "confidence": f"{base}/confidence.png",
+        "metrics": f"{base}/metrics.json",
+    }
 
 
 def run_inference(image_rgb, model_key=None):
@@ -331,6 +388,15 @@ async def segment_image(file: UploadFile = File(...), model_key: str = Form(None
     
     # 7. Safety percentages
     safety_percentages = compute_safety_percentages(distribution)
+
+    # 7.5 Print quick metrics summary to server console
+    used_model = model_key or registry.active_model_key
+    run_id = str(uuid.uuid4())[:8] if SAVE_ARTIFACTS else None
+    print(
+        f"[SEGMENT] id={run_id or '-'} model={used_model} time={inference_time*1000:.1f}ms "
+        f"conf={quality_metrics['confidence_score_pct']}% highConf={quality_metrics['high_confidence_pixels_pct']}% "
+        f"safe={safety_percentages['safe']}% obstacle={safety_percentages['obstacle']}%"
+    )
     
     # 8. Encode outputs as base64
     result = {
@@ -350,6 +416,36 @@ async def segment_image(file: UploadFile = File(...), model_key: str = Form(None
         "input_size": f"{orig_w}x{orig_h}",
         "model_used": model_key or registry.active_model_key,
     }
+
+    # 9. Save plots/artifacts to disk (optional) and return URLs for browser access
+    if SAVE_ARTIFACTS:
+        artifact_metrics = {
+            "run_id": run_id,
+            "timestamp": time.time(),
+            "model_used": used_model,
+            "input_size": result["input_size"],
+            "inference_time_ms": result["inference_time_ms"],
+            "confidence_score_pct": result["confidence_score_pct"],
+            "accuracy_estimate_pct": result["accuracy_estimate_pct"],
+            "high_confidence_pixels_pct": result["high_confidence_pixels_pct"],
+            "safety_percentages": safety_percentages,
+            "class_distribution": distribution,
+        }
+        try:
+            artifacts = save_segment_artifacts(
+                run_id=run_id,
+                image_rgb=image_rgb,
+                mask_rgb=mask_rgb,
+                overlay_rgb=overlay,
+                safety_rgb=safety_map,
+                confidence_rgb=conf_colored,
+                metrics=artifact_metrics,
+            )
+            result["run_id"] = run_id
+            result["artifact_urls"] = artifacts
+        except Exception as exc:
+            # Do not fail the request if saving fails (disk permissions, etc.)
+            result["artifact_error"] = str(exc)
     
     return result
 

@@ -1602,6 +1602,35 @@ body.is-processing .upload-zone {
     position: relative;
 }
 
+.quality-meta {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--glass-border);
+    display: grid;
+    gap: 8px;
+}
+
+.quality-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    letter-spacing: 0.2px;
+}
+
+.qm-k {
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 10px;
+}
+
+.qm-v {
+    color: var(--text-1);
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 11px;
+}
+
 /* ==========================
    15. RECOMMENDATION
    ========================== */
